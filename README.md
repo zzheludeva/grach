@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Remeslo — «Пробуй новое, работай руками»
 
-## Getting Started
+Интерактивный MVP цифровой платформы для людей, которые создают вещи своими руками:
+лента вдохновения и сообщество, обучение и мастер-классы, маркетплейс handmade,
+ИИ-студия «Творческий пинг-понг» и кабинет автора. Интерфейс на 4 языках
+(русский, английский, португальский (Бразилия), испанский), региональные настройки
+России и Бразилии.
 
-First, run the development server:
+## Запуск
+
+Нужен Node.js 20+ (на этой машине установлен локально: `~/.local/node-v22.23.4-darwin-arm64/bin`).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+export PATH=~/.local/node-v22.23.4-darwin-arm64/bin:$PATH
+npm install
+npm run dev          # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Продакшен-сборка: `npm run build && npm run start`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Откройте `/welcome` и войдите в демо-аккаунт или пройдите регистрацию.
+Все действия сохраняются в `localStorage` (переживают перезагрузку и смену языка).
+Сброс: «Настройки → Сбросить демо-данные».
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Демо-аккаунты
 
-## Learn More
+| Аккаунт | Роль | Что посмотреть |
+|---|---|---|
+| Аня Соколова (Казань) | начинающая | лента «Для вас», избранное, запись на онлайн-мастер-класс, заказ в пути |
+| Марина Гончарова (СПб) | профессиональный мастер | кабинет автора, входящие заказы, мастер-классы, платный урок |
+| Lucas Andrade (São Paulo) | покупатель | корзина с изменившейся ценой и недоступным товаром, заказы на всех этапах, цены в R$ |
 
-To learn more about Next.js, take a look at the following resources:
+### Переменные окружения (необязательно)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+См. `.env.example`.
+- `ANTHROPIC_API_KEY` — включает настоящую языковую модель в ИИ-студии (серверный маршрут `/api/ai/chat`, модель `claude-opus-5-5`). Ключ читается только на сервере.
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — подготовка к Supabase (`src/lib/supabase.ts`, схема `supabase/schema.sql`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Стек
 
-## Deploy on Vercel
+Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · Lucide · Recharts ·
+`@anthropic-ai/sdk` (сервер) · `@supabase/supabase-js` (подготовлено).
+UI-компоненты написаны в стиле shadcn/ui (`cn` + варианты, `src/components/ui`), без генерации через CLI.
+Шрифты: Unlimited Pie (заголовки) и Raleway (интерфейс) — локальные файлы в `src/fonts`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Архитектура
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+  app/
+    welcome, onboarding        приветствие, регистрация из 5 шагов
+    (app)/                     разделы за авторизацией (общий AppShell)
+      feed, post/[id]          лента и публикация
+      learn, learn/tutorial/[id], learn/workshop/[id]
+      market, market/[id], cart, checkout, orders, orders/[id]
+      studio                   ИИ-студия
+      dashboard                кабинет автора
+      profile/[username], profile/edit, connections/[username]
+      favorites, search, notifications, messages, settings
+    api/ai/chat                серверный маршрут для языковой модели
+  components/ui                дизайн-система: Button, Card, Input, Select, Tabs, Chip, Badge,
+                               Avatar, Modal, Dropdown, Toast, EmptyState, Spinner, Mosaic
+  data/seed.ts                 демо-база: 14 пользователей, 28 публикаций, 16 товаров,
+                               9 уроков, 6 мастер-классов, заказы, отзывы, подписки
+  i18n/                        локали, словари (messages/*.ts), локализованные категории,
+                               провайдер с Intl-форматированием
+  lib/store.tsx                репозиторий данных: все мутации через actions (точка замены на Supabase)
+  lib/recommend.ts             алгоритм ленты
+  lib/regions.ts               регионы: валюта, телефон, адрес, доставка, часовые пояса
+  lib/analytics.ts             аналитика автора из данных приложения
+  lib/ai/                      интерфейс провайдера ИИ и демо-сценарии
+supabase/schema.sql            схема PostgreSQL + RLS
+```
+
+### Локализация
+- Язык интерфейса и страна — независимые настройки; смена страны не меняет язык.
+- Язык предлагается по настройкам браузера (баннер), не по геолокации; выбор сохраняется.
+- Fallback на английский; плюрализация через `Intl.PluralRules`; числа, валюты, даты — через `Intl`.
+- Деньги хранятся как `{ amount, currency }`; конвертации нет — цена в валюте мастера с пометкой.
+- Пользовательский контент хранится на языке автора; перевод — только по кнопке.
+- Новый язык: словарь в `src/i18n/messages` + код в `LOCALES`. Новая страна: запись в `REGIONS`.
+- Логические CSS-свойства и `dir` по языку — архитектура готова к RTL.
+
+### Рекомендации в ленте
+Счёт = интересы (+3) + подписка на автора (+4) + вовлечённость в категорию (0–3) +
+популярность + свежесть; затем разнообразие (не два поста одного автора подряд),
+и каждая 5-я позиция — «Новое направление» из неизведанной категории.
+
+## Что работает в демонстрационном режиме
+
+- **Авторизация** — локальная демо-сессия; пароль не отправляется и не хранится.
+- **Данные** — в браузере (`localStorage`); Supabase не подключён, схема готова.
+- **Оплата** — не производится нигде.
+- **Доставка** — способы и цены демонстрационные; трек-номер и статусы симулируются кнопкой «Следующий этап (демо)».
+- **ИИ-студия** — без `ANTHROPIC_API_KEY` работает на заранее написанных ветвящихся диалогах (подписано в интерфейсе).
+- **Сообщения** — только в браузере, не доставляются.
+- **Переводы публикаций** — заранее сохранённые демо-переводы у нескольких постов.
+- **Видео** — показывается кадр, без воспроизведения.
+- **Просмотры** — демо-счётчики; остальная аналитика считается из данных приложения, без прогнозов.
+- **Добавление своих товаров в каталог** — не реализовано (смотрите аккаунт мастера).
+
+## Фотографии
+Реальные фотографии изделий под лицензиями Creative Commons (Flickr через Openverse);
+авторы и лицензии — на странице `/credits` и в `src/data/credits.json`.
+Аватары — инициалы на цветной «мозаике», без фото реальных людей.
