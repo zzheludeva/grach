@@ -1,6 +1,7 @@
 import type { SeedData } from "@/data/seed";
 import type { CartItem, CountryCode, Product, User } from "./types";
 import { cartOf } from "./selectors";
+import { deliveryCost } from "./regions";
 
 export type LineIssue = "unavailable" | "priceChanged" | "noShipping" | "qtyReduced" | null;
 export interface CartLine {
@@ -24,7 +25,7 @@ export function cartGroups(d: SeedData, me: string | null, country: CountryCode)
       if (!product) return null;
       const maxQty = product.availability === "in_stock" ? product.stock : 10;
       let issue: LineIssue = null;
-      if (product.availability === "sold_out" || maxQty === 0) issue = "unavailable";
+      if (product.status !== "published" || product.availability === "sold_out" || maxQty === 0) issue = "unavailable";
       else if (!product.shipsTo.includes(country)) issue = "noShipping";
       else if (product.price.amount !== item.priceAtAdd.amount || product.price.currency !== item.priceAtAdd.currency) issue = "priceChanged";
       else if (item.qty > maxQty) issue = "qtyReduced";
@@ -43,4 +44,26 @@ export function cartGroups(d: SeedData, me: string | null, country: CountryCode)
       checkoutable: ok,
     };
   });
+}
+
+/**
+ * Shipping for one seller's parcel. Seller-defined terms win (fixed price or free);
+ * otherwise the region's carrier rate for the chosen method. One parcel per seller,
+ * so the most expensive rule in the parcel applies. null = cost unknown.
+ */
+export function groupShippingCost(g: SellerGroup, country: CountryCode, methodId: string): number | null {
+  const lines = g.checkoutable.length ? g.checkoutable : g.lines;
+  let max = 0;
+  for (const l of lines) {
+    const sh = l.product.shipping;
+    if (sh?.mode === "free") continue;
+    if (sh?.mode === "fixed") {
+      max = Math.max(max, sh.cost ?? 0);
+      continue;
+    }
+    const c = deliveryCost(country, methodId, g.currency);
+    if (c === null) return null;
+    max = Math.max(max, c);
+  }
+  return max;
 }

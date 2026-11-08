@@ -2,7 +2,7 @@
 import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Clock, MapPin, MonitorPlay, Users, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock, MapPin, MonitorPlay, Users, CheckCircle2, Pencil, Link2, Wrench, ScrollText, GraduationCap, Ban } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { userById } from "@/lib/selectors";
@@ -12,6 +12,7 @@ import { FollowButton, SaveButton } from "@/components/common/actions";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { workshopPhase } from "@/lib/workshops";
 
 export default function WorkshopPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -22,25 +23,40 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
   const w = d.workshops.find((x) => x.id === id);
   const [confirm, setConfirm] = useState(false);
   const [cancel, setCancel] = useState(false);
-  if (!w) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/learn?tab=workshops">{t("learn.workshops")}</ButtonLink>} />;
+  if (!w || (w.status === "draft" && w.hostId !== meId)) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/learn?tab=workshops">{t("learn.workshops")}</ButtonLink>} />;
+  const phase = workshopPhase(w);
   const host = userById(d, w.hostId)!;
   const enrolled = d.enrollments.some((e) => e.userId === meId && e.workshopId === w.id);
   const left = w.seatsTotal - w.seatsTaken;
-  const past = new Date(w.startsAt).getTime() < Date.now();
+  const past = new Date(w.startsAt).getTime() < Date.now() || phase === "completed";
   const isHost = w.hostId === meId;
-  const end = new Date(new Date(w.startsAt).getTime() + w.durationMin * 60000).toISOString();
+  const end = w.endsAt;
   const differentTz = w.timeZone !== settings.timeZone;
   const hostTime = new Intl.DateTimeFormat(undefined, { timeZone: w.timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(w.startsAt));
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href="/learn?tab=workshops" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> {t("learn.workshops")}
-      </Link>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <Link href={isHost ? "/dashboard/events" : "/learn?tab=workshops"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
+          <ArrowLeft className="size-4" /> {isHost ? t("nav.myEvents") : t("learn.workshops")}
+        </Link>
+        {isHost && (phase === "draft" || phase === "published") && (
+          <ButtonLink href={`/dashboard/events/${w.id}`} size="sm" variant="soft">
+            <Pencil className="size-3.5" /> {t("ev.page.edit")}
+          </ButtonLink>
+        )}
+      </div>
+      {phase === "draft" && <DemoNote className="mb-4">{t("ev.page.draft")}</DemoNote>}
+      {phase === "cancelled" && (
+        <p role="status" className="mb-4 flex items-center gap-2 rounded-xl border border-rose/40 bg-rose-soft px-3 py-2.5 text-sm font-bold text-rose-deep">
+          <Ban className="size-4" /> {t("ev.page.cancelled")}
+        </p>
+      )}
+      {phase === "completed" && <DemoNote className="mb-4">{t("ev.page.completed")}</DemoNote>}
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0">
           <div className="relative aspect-[16/9] overflow-hidden rounded-3xl bg-line">
-            <Image src={w.cover} alt={w.title} fill priority sizes="(max-width: 1024px) 100vw, 640px" className="object-cover" />
+            <Image src={w.cover} alt={w.title} fill priority sizes="(max-width: 1024px) 100vw, 640px" unoptimized={w.cover.startsWith("data:")} className={cn("object-cover", phase === "cancelled" && "grayscale")} />
           </div>
           <div className="mt-5 flex flex-wrap gap-1.5">
             <Badge tone={w.format === "online" ? "info" : "rust"}>
@@ -48,6 +64,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
               {t(`workshop.${w.format}`)}
             </Badge>
             <Badge>{cat(w.category)}</Badge>
+            <Badge tone="warn">{t(`ev.kind.${w.kind}`)}</Badge>
             {enrolled && <Badge tone="success">{t("workshop.enrolled")}</Badge>}
           </div>
           <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={w.lang}>
@@ -57,7 +74,40 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
             {w.description}
           </p>
           <p className="mt-2 text-xs text-faint">{t("workshop.language", { lang: langName(w.lang) })}</p>
-          <section className="mt-8">
+          {(!!w.materials?.length || w.terms || (w.level && w.level !== "any")) && (
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {w.level && w.level !== "any" && (
+                <Card className="flex gap-3 p-4 text-sm">
+                  <GraduationCap className="mt-0.5 size-4 shrink-0 text-rust" />
+                  <div>
+                    <p className="text-xs font-semibold text-faint">{t("ev.page.level")}</p>
+                    <p className="font-semibold text-ink">{t(`level.${w.level}`)}</p>
+                  </div>
+                </Card>
+              )}
+              {!!w.materials?.length && (
+                <Card className="flex gap-3 p-4 text-sm">
+                  <Wrench className="mt-0.5 size-4 shrink-0 text-rust" />
+                  <div>
+                    <p className="text-xs font-semibold text-faint">{t("ev.page.materials")}</p>
+                    <ul className="list-inside list-disc text-ink" lang={w.lang}>
+                      {w.materials.map((m, i) => <li key={i}>{m}</li>)}
+                    </ul>
+                  </div>
+                </Card>
+              )}
+              {w.terms && (
+                <Card className="flex gap-3 p-4 text-sm sm:col-span-2">
+                  <ScrollText className="mt-0.5 size-4 shrink-0 text-rust" />
+                  <div>
+                    <p className="text-xs font-semibold text-faint">{t("ev.page.terms")}</p>
+                    <p className="whitespace-pre-line text-ink" lang={w.lang}>{w.terms}</p>
+                  </div>
+                </Card>
+              )}
+            </div>
+          )}
+          {w.program.length > 0 && <section className="mt-8">
             <h2 className="mb-3 text-lg font-bold text-ink">{t("workshop.program")}</h2>
             <ol className="relative space-y-3 border-s-2 border-dashed border-line ps-6">
               {w.program.map((p, i) => (
@@ -67,7 +117,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
                 </li>
               ))}
             </ol>
-          </section>
+          </section>}
           <Card className="mt-8 flex items-center gap-3 p-4">
             <Avatar name={host.name} color={host.avatarColor} size={48} href={`/profile/${host.username}`} />
             <Link href={`/profile/${host.username}`} className="min-w-0 flex-1">
@@ -81,7 +131,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
           </Card>
         </div>
 
-        <aside className="lg:sticky lg:top-20 lg:h-fit">
+        <aside className="lg:sticky lg:top-32 lg:h-fit">
           <Card className="space-y-4 p-5">
             <p className="nums text-2xl font-bold text-ink">{w.price ? money(w.price) : t("learn.free")}</p>
             <ul className="space-y-3 text-sm">
@@ -103,6 +153,24 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
                 {w.format === "online" ? <MonitorPlay className="mt-0.5 size-4 shrink-0 text-rust" /> : <MapPin className="mt-0.5 size-4 shrink-0 text-rust" />}
                 <span className="text-ink">{w.format === "online" ? t("workshop.onlineHint") : `${w.city}, ${w.venue}`}</span>
               </li>
+              {w.format === "online" && phase !== "cancelled" && (
+                <li className="flex gap-3">
+                  <Link2 className="mt-0.5 size-4 shrink-0 text-rust" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-faint">{t("ev.page.link")}</span>
+                    {/* The joining link is shown only to enrolled participants and the host. */}
+                    {enrolled || isHost ? (
+                      w.onlineUrl ? (
+                        <a href={w.onlineUrl} target="_blank" rel="noopener noreferrer" className="block break-all font-semibold text-teal hover:underline">{w.onlineUrl}</a>
+                      ) : (
+                        <span className="text-muted">{t("ev.page.linkMissing")}</span>
+                      )
+                    ) : (
+                      <span className="text-muted">{t("ev.page.linkHidden")}</span>
+                    )}
+                  </span>
+                </li>
+              )}
               <li className="flex gap-3">
                 <Users className="mt-0.5 size-4 shrink-0 text-rust" />
                 <span className="min-w-0 flex-1">
@@ -116,7 +184,9 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
             </ul>
             {isHost ? (
               <DemoNote>{t("workshop.youHost")}</DemoNote>
-            ) : past ? (
+            ) : phase === "cancelled" ? (
+              <Button disabled className="w-full">{t("ev.phase.cancelled")}</Button>
+            ) : phase === "draft" ? null : past ? (
               <Button disabled className="w-full">{t("workshop.past")}</Button>
             ) : enrolled ? (
               <div className="space-y-2">

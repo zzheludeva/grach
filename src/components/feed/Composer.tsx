@@ -9,28 +9,11 @@ import { Field, Input, Select, Textarea, Chip, DemoNote } from "@/components/ui/
 import { useI18n } from "@/i18n/I18nProvider";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
+import { downscale } from "@/lib/image";
 import { CATEGORIES } from "@/i18n/content";
 import type { CategoryId, PostKind } from "@/lib/types";
 
 const KINDS: PostKind[] = ["finished", "process", "tools", "tip", "experiment"];
-
-/** Downscale an uploaded photo so the demo can keep it in localStorage. */
-async function downscale(file: File, max = 1000): Promise<string> {
-  const url = URL.createObjectURL(file);
-  const img = document.createElement("img");
-  await new Promise((res, rej) => {
-    img.onload = res;
-    img.onerror = rej;
-    img.src = url;
-  });
-  const scale = Math.min(1, max / Math.max(img.width, img.height));
-  const c = document.createElement("canvas");
-  c.width = Math.round(img.width * scale);
-  c.height = Math.round(img.height * scale);
-  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-  URL.revokeObjectURL(url);
-  return c.toDataURL("image/jpeg", 0.78);
-}
 
 export function Composer({ open, onClose, prefill }: { open: boolean; onClose: () => void; prefill?: { title?: string; body?: string } }) {
   const { t, cat } = useI18n();

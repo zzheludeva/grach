@@ -135,7 +135,7 @@ const es: Dict = {
     title: "Notificaciones", empty: "Aún no hay notificaciones", markAll: "Marcar todas como leídas", allRead: "Estás al día", new: "Nueva",
     unread: { one: "{count} sin leer", other: "{count} sin leer" },
     k: {
-      welcome: "¡Te damos la bienvenida a Remeslo! Tu feed ya está ajustado a tus intereses.",
+      welcome: "¡Te damos la bienvenida a GRACH! Tu feed ya está ajustado a tus intereses.",
       like: "A {name} le gustó tu publicación “{title}”", comment: "{name} comentó en “{title}”", reply: "{name} respondió en “{title}”",
       follow: "{name} empezó a seguirte", newOrder: "Nuevo pedido {number}: confírmalo en tu panel de autor", orderPlaced: "Pedido {number} realizado",
       orderStatus: "Se actualizó el estado del pedido {number}", enrolled: "{name} se inscribió en tu taller “{title}”", workshopSoon: "Se acerca el taller “{title}”: prepara los materiales",
@@ -286,7 +286,7 @@ const es: Dict = {
     conversionNote: "Conversión = pedidos / visitas a la ficha (contador demo).", noProducts: "Añade piezas para ver ventas",
     audienceTitle: "Audiencia", followersGrowth: "Crecimiento de seguidores", followers: "Seguidores", topContent: "Contenido destacado", noPosts: "Aún no hay publicaciones.",
     incoming: "Pedidos entrantes", noIncoming: "Aún no hay pedidos.", confirmOrder: "Confirmar", nextStage: "Siguiente etapa",
-    myWorkshops: "Mis talleres", noWorkshops: "Aún no impartes talleres.", inAppEnrollments: "Inscritos vía Remeslo",
+    myWorkshops: "Mis talleres", noWorkshops: "Aún no impartes talleres.", inAppEnrollments: "Inscritos vía GRACH",
     tutorialsSold: { one: "{count} tutorial vendido", other: "{count} tutoriales vendidos" },
     viewProfile: "Abrir perfil",
     startTitle: "Tu negocio creativo empieza aquí", startText: "Cuando empieces a vender o impartir talleres, aquí aparecerán ingresos y análisis. De momento, empieza por aquí.",

@@ -9,6 +9,8 @@ export interface AITurnInput {
   userText: string;
   optionNext?: string;
   postContext?: { title: string; body: string; category?: string };
+  /** Placeholders for scripted demo text (project title, next step…). */
+  vars?: Record<string, string | number>;
 }
 
 export interface AITurnOutput {

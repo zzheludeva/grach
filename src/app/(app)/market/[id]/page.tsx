@@ -1,9 +1,9 @@
 "use client";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Hammer, MessageCircle, Minus, Plus, Ruler, Truck, MapPin, ShoppingCart, PackageCheck } from "lucide-react";
+import { ArrowLeft, Check, Hammer, MessageCircle, Minus, Plus, Ruler, Truck, MapPin, ShoppingCart, PackageCheck, Pencil, Brush, ListChecks, Tag } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { canShipTo, cartOf, rating, userById } from "@/lib/selectors";
@@ -15,11 +15,12 @@ import { useToast } from "@/components/ui/toast";
 import { region } from "@/lib/regions";
 import { cn } from "@/lib/utils";
 import { useTranslation, TranslateBar } from "@/components/common/Translatable";
+import { techniqueName } from "@/i18n/content";
 
 export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { state, meId, settings, actions } = useStore();
-  const { t, cat, money, relative, langName } = useI18n();
+  const { t, cat, money, relative, langName, locale } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const d = state!.data;
@@ -27,6 +28,13 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const [img, setImg] = useState(0);
   const [qty, setQty] = useState(1);
   const tr = useTranslation(p?.lang ?? "ru");
+  useEffect(() => {
+    if (p) actions.viewProduct(p.id);
+    // count one view per visit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  // Drafts and hidden products are visible to their seller only.
+  if (p && p.status !== "published" && p.sellerId !== meId) return <EmptyState title={t("sell.page.notAvailable")} action={<ButtonLink href="/market">{t("nav.market")}</ButtonLink>} />;
   if (!p) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/market">{t("nav.market")}</ButtonLink>} />;
   const seller = userById(d, p.sellerId)!;
   const ships = canShipTo(p, settings.country);
@@ -35,7 +43,9 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const max = p.availability === "in_stock" ? p.stock : 10;
   const reviews = d.productReviews.filter((r) => r.productId === p.id);
   const r = rating(reviews);
-  const similar = d.products.filter((x) => x.id !== p.id && x.category === p.category).concat(d.products.filter((x) => x.id !== p.id && x.sellerId === p.sellerId && x.category !== p.category)).slice(0, 4);
+  const pub = d.products.filter((x) => x.status === "published" && x.id !== p.id);
+  const similar = pub.filter((x) => x.category === p.category).concat(pub.filter((x) => x.sellerId === p.sellerId && x.category !== p.category)).slice(0, 4);
+  const buyable = p.status === "published";
   const delivery = region(settings.country).delivery;
   const sameCountry = p.shipsFrom === settings.country;
 
@@ -46,19 +56,27 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="mx-auto max-w-6xl">
-      <button onClick={() => router.back()} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> {t("common.back")}
-      </button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <button onClick={() => router.back()} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
+          <ArrowLeft className="size-4" /> {t("common.back")}
+        </button>
+        {isMine && (
+          <ButtonLink href={`/dashboard/products/${p.id}`} size="sm" variant="soft">
+            <Pencil className="size-3.5" /> {t("sell.page.edit")}
+          </ButtonLink>
+        )}
+      </div>
+      {p.status !== "published" && <DemoNote className="mb-4">{p.status === "draft" ? t("sell.page.draft") : t("sell.page.hidden")}</DemoNote>}
       <div className="grid gap-8 lg:grid-cols-[1.1fr_1fr]">
         <div className="min-w-0">
           <div className="relative aspect-square overflow-hidden rounded-3xl bg-line">
-            <Image src={p.images[img]} alt={p.title} fill priority sizes="(max-width: 1024px) 100vw, 600px" className={cn("object-cover", p.availability === "sold_out" && "grayscale-[50%]")} />
+            <Image src={p.images[img] ?? p.images[0]} alt={p.title} fill priority sizes="(max-width: 1024px) 100vw, 600px" className={cn("object-cover", p.availability === "sold_out" && "grayscale-[50%]")} />
             <SaveButton type="product" id={p.id} variant="glass" className="absolute end-3 top-3" />
           </div>
           {p.images.length > 1 && (
             <div className="mt-3 flex gap-2">
               {p.images.map((src, i) => (
-                <button key={src} onClick={() => setImg(i)} aria-label={t("product.photo", { n: i + 1 })} aria-pressed={img === i} className={cn("relative size-20 overflow-hidden rounded-xl border-2", img === i ? "border-ink" : "border-transparent opacity-70 hover:opacity-100")}>
+                <button key={`${i}-${src.slice(-20)}`} onClick={() => setImg(i)} aria-label={t("product.photo", { n: i + 1 })} aria-pressed={img === i} className={cn("relative size-20 overflow-hidden rounded-xl border-2", img === i ? "border-ink" : "border-transparent opacity-70 hover:opacity-100")}>
                   <Image src={src} alt="" fill sizes="80px" className="object-cover" />
                 </button>
               ))}
@@ -69,6 +87,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
         <div className="min-w-0">
           <div className="flex flex-wrap gap-1.5">
             <Badge>{cat(p.category)}</Badge>
+            {p.saleType === "personalized" && <Badge tone="info">{t("sell.saleType.personalized")}</Badge>}
             {p.availability === "in_stock" && <Badge tone="success">{t("product.inStockCount", { count: p.stock })}</Badge>}
             {p.availability === "made_to_order" && <Badge tone="warn">{t("product.madeToOrderDays", { count: p.makeDays ?? 0 })}</Badge>}
             {p.availability === "sold_out" && <Badge tone="dark">{t("product.soldOut")}</Badge>}
@@ -100,7 +119,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             </div>
           )}
 
-          {!isMine && p.availability !== "sold_out" && ships && (
+          {p.saleType === "personalized" && <p className="mt-3 text-sm text-muted">{t("sell.page.personalized")}</p>}
+          {!isMine && buyable && p.availability !== "sold_out" && ships && (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <div className="flex items-center rounded-xl border border-line bg-surface">
                 <button onClick={() => setQty(Math.max(1, qty - 1))} className="flex size-11 items-center justify-center text-ink disabled:opacity-30" disabled={qty <= 1} aria-label={t("cart.less")}>
@@ -138,7 +158,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
           </div>
 
           <dl className="mt-6 grid grid-cols-1 gap-3 rounded-2xl border border-line bg-surface p-4 text-sm sm:grid-cols-2">
-            <div className="flex gap-2.5">
+            {p.materials.length > 0 && <div className="flex gap-2.5">
               <Hammer className="mt-0.5 size-4 shrink-0 text-rust" />
               <div>
                 <dt className="text-xs font-semibold text-faint">{t("product.materials")}</dt>
@@ -146,14 +166,30 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                   {p.materials.join(", ")}
                 </dd>
               </div>
-            </div>
-            <div className="flex gap-2.5">
+            </div>}
+            {p.dimensions && <div className="flex gap-2.5">
               <Ruler className="mt-0.5 size-4 shrink-0 text-rust" />
               <div>
                 <dt className="text-xs font-semibold text-faint">{t("product.dimensions")}</dt>
                 <dd className="text-ink" lang={p.lang}>
                   {p.dimensions}
                 </dd>
+              </div>
+            </div>}
+            {p.technique && (
+              <div className="flex gap-2.5">
+                <Brush className="mt-0.5 size-4 shrink-0 text-rust" />
+                <div>
+                  <dt className="text-xs font-semibold text-faint">{t("sell.page.technique")}</dt>
+                  <dd className="text-ink">{techniqueName(p.technique, locale)}</dd>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2.5">
+              <Tag className="mt-0.5 size-4 shrink-0 text-rust" />
+              <div>
+                <dt className="text-xs font-semibold text-faint">{t("sell.page.saleType")}</dt>
+                <dd className="text-ink">{t(`sell.saleType.${p.saleType}`)}</dd>
               </div>
             </div>
             <div className="flex gap-2.5">
@@ -173,7 +209,37 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
               </div>
             </div>
           </dl>
-          {ships && (
+          {!!p.specs?.length && (
+            <div className="mt-3 rounded-2xl border border-line bg-surface p-4 text-sm">
+              <p className="mb-2 flex items-center gap-2 font-bold text-ink">
+                <ListChecks className="size-4 text-rust" /> {t("sell.page.specs")}
+              </p>
+              <dl className="divide-y divide-line">
+                {p.specs.map((sp, i) => (
+                  <div key={i} className="flex justify-between gap-3 py-1.5" lang={p.lang}>
+                    <dt className="text-muted">{sp.label}</dt>
+                    <dd className="text-end font-semibold text-ink">{sp.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+          {ships && p.shipping && p.shipping.mode !== "region" ? (
+            <div className="mt-3 rounded-2xl border border-line bg-surface p-4 text-sm">
+              <p className="mb-1 flex items-center gap-2 font-bold text-ink">
+                <Truck className="size-4 text-rust" /> {t("sell.page.sellerShipping")}
+              </p>
+              <p className="nums text-text/85">
+                {p.shipping.mode === "free" ? t("sell.page.freeShipping") : t("sell.page.fixedCost", { cost: money({ amount: p.shipping.cost ?? 0, currency: p.price.currency }) })}
+              </p>
+              {p.shipping.terms && (
+                <p className="mt-2 text-text/85" lang={p.lang}>
+                  <span className="font-semibold text-ink">{t("sell.page.terms")}:</span> {p.shipping.terms}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-faint">{t("delivery.demoNote")}</p>
+            </div>
+          ) : ships && (
             <div className="mt-3 rounded-2xl border border-line bg-surface p-4 text-sm">
               <p className="mb-2 flex items-center gap-2 font-bold text-ink">
                 <Truck className="size-4 text-rust" /> {t("product.deliveryTo", { country: t(`countries.${settings.country}`) })}
@@ -192,6 +258,11 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                 })}
               </ul>
               {!sameCountry && <p className="mt-2 text-xs text-faint">{t("delivery.intlNote")}</p>}
+              {p.shipping?.terms && (
+                <p className="mt-2 text-text/85" lang={p.lang}>
+                  <span className="font-semibold text-ink">{t("sell.page.terms")}:</span> {p.shipping.terms}
+                </p>
+              )}
               <p className="mt-2 text-xs text-faint">{t("delivery.demoNote")}</p>
             </div>
           )}
@@ -204,9 +275,11 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             <p className="font-display text-2xl text-white">{t("product.story")}</p>
           </div>
           <div className="space-y-4 p-5">
-            <p className="text-[15px] italic leading-relaxed text-text/90" lang={p.lang}>
-              “{p.story}”
-            </p>
+            {p.story && (
+              <p className="text-[15px] italic leading-relaxed text-text/90" lang={p.lang}>
+                “{p.story}”
+              </p>
+            )}
             <p className="text-[15px] leading-relaxed text-text/85" lang={p.lang}>
               {p.description}
             </p>

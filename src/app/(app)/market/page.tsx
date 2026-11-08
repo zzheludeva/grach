@@ -25,6 +25,7 @@ export default function Market() {
   const list = useMemo(() => {
     const nq = norm(q.trim());
     let l = d.products.filter((p) => {
+      if (p.status !== "published") return false;
       if (category && p.category !== category) return false;
       if (avail && p.availability !== avail) return false;
       if (shipsHere && !p.shipsTo.includes(settings.country)) return false;
@@ -68,7 +69,7 @@ export default function Market() {
           <Chip active={!category} onClick={() => setCategory("")}>
             {t("feed.all")}
           </Chip>
-          {CATEGORIES.filter((c) => d.products.some((p) => p.category === c.id)).map((c) => (
+          {CATEGORIES.filter((c) => d.products.some((p) => p.status === "published" && p.category === c.id)).map((c) => (
             <Chip
               key={c.id}
               color={c.color}

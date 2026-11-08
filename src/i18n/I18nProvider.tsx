@@ -61,6 +61,9 @@ export function I18nProvider({
   useEffect(() => {
     document.documentElement.lang = locale;
     document.documentElement.dir = dir;
+    // Brand is ГРАЧ for Russian, GRACH for every other interface language.
+    const title = lookup(messages[locale], "brand.title") ?? lookup(messages.en, "brand.title");
+    if (typeof title === "string") document.title = title;
   }, [locale, dir]);
 
   const resolve = useCallback(
@@ -155,6 +158,11 @@ export function I18nProvider({
   }, [locale, country, timeZone, dir, resolve]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** For components that may render before the provider (e.g. the loading logo). */
+export function useI18nOptional() {
+  return useContext(Ctx);
 }
 
 export function useI18n() {

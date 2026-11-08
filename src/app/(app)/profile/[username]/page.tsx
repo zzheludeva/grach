@@ -191,7 +191,11 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                       {i.isProject ? <FolderKanban className="size-4 text-rust" /> : <Lightbulb className="size-4 text-saffron" />}
                       <Badge tone={i.isProject ? "rust" : "warn"}>{i.isProject ? t("studio.project") : t("studio.idea")}</Badge>
                     </div>
-                    <p className="font-bold text-ink">{i.title}</p>
+                    {i.projectId ? (
+                      <Link href={`/dashboard/projects/${i.projectId}`} className="font-bold text-ink hover:underline">{i.title}</Link>
+                    ) : (
+                      <p className="font-bold text-ink">{i.title}</p>
+                    )}
                     <p className="mt-1 text-sm text-muted">{i.text}</p>
                   </Card>
                 ))}

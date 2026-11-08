@@ -135,7 +135,7 @@ const en: Dict = {
     title: "Notifications", empty: "No notifications yet", markAll: "Mark all as read", allRead: "You're all caught up", new: "New",
     unread: { one: "{count} unread", other: "{count} unread" },
     k: {
-      welcome: "Welcome to Remeslo! Your feed is already tuned to your interests.",
+      welcome: "Welcome to GRACH! Your feed is already tuned to your interests.",
       like: "{name} liked your post “{title}”", comment: "{name} commented on “{title}”", reply: "{name} replied in “{title}”",
       follow: "{name} started following you", newOrder: "New order {number} — confirm it in your author dashboard", orderPlaced: "Order {number} placed",
       orderStatus: "Order {number} status updated", enrolled: "{name} booked your workshop “{title}”", workshopSoon: "Workshop “{title}” is coming up — remember to prepare materials",
@@ -286,7 +286,7 @@ const en: Dict = {
     conversionNote: "Conversion = orders / product page views (demo counter).", noProducts: "Add pieces to see sales",
     audienceTitle: "Audience", followersGrowth: "Follower growth", followers: "Followers", topContent: "Top content", noPosts: "No posts yet.",
     incoming: "Incoming orders", noIncoming: "No orders yet.", confirmOrder: "Confirm", nextStage: "Next stage",
-    myWorkshops: "My workshops", noWorkshops: "You don't host workshops yet.", inAppEnrollments: "Booked via Remeslo",
+    myWorkshops: "My workshops", noWorkshops: "You don't host workshops yet.", inAppEnrollments: "Booked via GRACH",
     tutorialsSold: { one: "{count} tutorial sold", other: "{count} tutorials sold" },
     viewProfile: "Open profile",
     startTitle: "Your creative business starts here", startText: "Once you start selling or hosting workshops, income and analytics will appear here. For now, here's where to begin.",

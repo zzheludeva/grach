@@ -9,6 +9,7 @@ import { rating, userById, canShipTo } from "@/lib/selectors";
 import { Badge, Stars } from "@/components/ui/primitives";
 import { SaveButton } from "./actions";
 import { cn } from "@/lib/utils";
+import { workshopPhase } from "@/lib/workshops";
 
 export function Price({ value, className }: { value: Product["price"]; className?: string }) {
   const { money, settings } = { ...useI18n(), settings: useStore().settings };
@@ -104,7 +105,8 @@ export function WorkshopCard({ w, enrolled }: { w: Workshop; enrolled?: boolean 
   const { t, money, date } = useI18n();
   const host = userById(state!.data, w.hostId);
   const left = w.seatsTotal - w.seatsTaken;
-  const past = new Date(w.startsAt).getTime() < Date.now();
+  const phase = workshopPhase(w);
+  const past = phase === "published" && new Date(w.startsAt).getTime() < Date.now();
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-[var(--radius-tile)] border border-line bg-surface shadow-[var(--shadow-tile)] sm:flex-row">
       <Link href={`/learn/workshop/${w.id}`} className="relative block aspect-[16/10] shrink-0 overflow-hidden bg-line/40 sm:aspect-auto sm:w-56">
@@ -122,7 +124,9 @@ export function WorkshopCard({ w, enrolled }: { w: Workshop; enrolled?: boolean 
             {t(`workshop.${w.format}`)}
             {w.city ? ` · ${w.city}` : ""}
           </Badge>
-          {enrolled && <Badge tone="success">{t("workshop.enrolled")}</Badge>}
+          {w.kind === "event" && <Badge tone="warn">{t("ev.kind.event")}</Badge>}
+          {enrolled && phase !== "cancelled" && <Badge tone="success">{t("workshop.enrolled")}</Badge>}
+          {phase !== "published" && <Badge tone={phase === "cancelled" ? "danger" : "neutral"}>{t(`ev.phase.${phase}`)}</Badge>}
           {past && <Badge>{t("workshop.past")}</Badge>}
         </div>
         <Link href={`/learn/workshop/${w.id}`} className="line-clamp-2 font-bold leading-snug text-ink hover:underline" lang={w.lang}>

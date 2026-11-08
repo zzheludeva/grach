@@ -143,7 +143,7 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
           </section>
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:h-fit">
+        <aside className="space-y-4 lg:sticky lg:top-32 lg:h-fit">
           <Card className="p-5">
             <p className="nums text-2xl font-bold text-ink">{tut.price ? money(tut.price) : t("learn.free")}</p>
             {owned && tut.price && tut.authorId !== meId && <Badge tone="success" className="mt-1">{t("learn.purchased")}</Badge>}

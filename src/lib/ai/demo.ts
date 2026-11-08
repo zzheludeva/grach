@@ -356,10 +356,122 @@ const S: Record<AIScenario, Script> = {
       },
       end: {
         text: {
-          ru: "Хорошо. Сохрани план как проект — он появится в профиле во вкладке «Проекты». А если проект можно продавать или учить ему других, загляни в «Кабинет автора».",
-          en: "Good. Save the plan as a project — it'll appear in your profile under 'Projects'. And if it could be sold or taught, take a look at the Author dashboard.",
-          pt: "Ótimo. Salve o plano como projeto — ele aparecerá no seu perfil em 'Projetos'. E se der para vender ou ensinar, dê uma olhada no Painel do autor.",
-          es: "Bien. Guarda el plan como proyecto: aparecerá en tu perfil en 'Proyectos'. Y si se puede vender o enseñar, echa un vistazo al Panel de autor.",
+          ru: "Хорошо. Нажми «Создать проект» — план сохранится в «Кабинете автора → Мои проекты». А если проект можно продавать или учить ему других, загляни в «Кабинет автора».",
+          en: "Good. Press “Create project” — the plan will be saved under Author dashboard → My projects. And if it could be sold or taught, take a look at the Author dashboard.",
+          pt: "Ótimo. Toque em “Criar projeto” — o plano fica salvo em Painel do autor → Meus projetos. E se der para vender ou ensinar, dê uma olhada no Painel do autor.",
+          es: "Bien. Pulsa «Crear proyecto»: el plan se guardará en Panel de autor → Mis proyectos. Y si se puede vender o enseñar, echa un vistazo al Panel de autor.",
+        },
+      },
+    },
+  },
+  free: {
+    start: {
+      ru: "Что хочешь создать сегодня? Расскажи о своей идее — вместе подумаем, как её воплотить.",
+      en: "What do you want to create today? Tell me about your idea — we'll figure out together how to bring it to life.",
+      pt: "O que você quer criar hoje? Conte sua ideia — vamos pensar juntos em como realizá-la.",
+      es: "¿Qué quieres crear hoy? Cuéntame tu idea y pensemos juntos cómo hacerla realidad.",
+    },
+    nodes: {
+      root: { text: { ru: "", en: "", pt: "", es: "" }, next: "clarify" },
+      clarify: {
+        text: {
+          ru: "Интересная мысль — «{idea}». Чтобы не фантазировать впустую, уточню три вещи:\n\n1. Какие материалы и инструменты уже есть дома?\n2. Сколько времени готов(а) потратить — вечер, выходные, месяц?\n3. Что важнее в результате: польза, красота или удовольствие от процесса?",
+          en: "Interesting thought — “{idea}”. So we don't dream in a vacuum, three questions:\n\n1. What materials and tools do you already have?\n2. How much time are you ready to spend — an evening, a weekend, a month?\n3. What matters most in the result: usefulness, beauty or the joy of the process?",
+          pt: "Pensamento interessante — “{idea}”. Para não sonhar no vazio, três perguntas:\n\n1. Que materiais e ferramentas você já tem?\n2. Quanto tempo quer dedicar — uma noite, um fim de semana, um mês?\n3. O que importa mais no resultado: utilidade, beleza ou o prazer do processo?",
+          es: "Idea interesante: «{idea}». Para no soñar en el vacío, tres preguntas:\n\n1. ¿Qué materiales y herramientas ya tienes?\n2. ¿Cuánto tiempo quieres dedicar: una tarde, un fin de semana, un mes?\n3. ¿Qué importa más en el resultado: utilidad, belleza o el placer del proceso?",
+        },
+        next: "directions",
+      },
+      directions: {
+        text: {
+          ru: "Спасибо, картинка проясняется. Вот три способа подойти к идее — выбери один или смешай:",
+          en: "Thanks, the picture is getting clearer. Here are three ways to approach the idea — pick one or mix them:",
+          pt: "Obrigado, a imagem está ficando clara. Aqui vão três jeitos de abordar a ideia — escolha um ou misture:",
+          es: "Gracias, la imagen se aclara. Aquí van tres formas de abordar la idea; elige una o mézclalas:",
+        },
+        ideas: [
+          { title: { ru: "Пробный мини-образец", en: "A small test piece", pt: "Uma miniamostra", es: "Una muestra pequeña" }, text: { ru: "Сделай уменьшенную версию за один вечер: проверишь материал и технику без риска.", en: "Make a scaled-down version in one evening: test the material and technique with no risk.", pt: "Faça uma versão reduzida em uma noite: teste material e técnica sem risco.", es: "Haz una versión reducida en una tarde: prueba material y técnica sin riesgo." } },
+          { title: { ru: "Одно ограничение", en: "One constraint", pt: "Uma restrição", es: "Una restricción" }, text: { ru: "Только материалы, которые уже есть дома, или только два цвета. Рамки помогают начать.", en: "Only materials you already have, or only two colours. Limits help you start.", pt: "Só materiais que já tem em casa, ou só duas cores. Limites ajudam a começar.", es: "Solo materiales que ya tienes o solo dos colores. Los límites ayudan a empezar." } },
+          { title: { ru: "Смешать с привычным", en: "Mix with the familiar", pt: "Misturar com o conhecido", es: "Mezclar con lo conocido" }, text: { ru: "Соедини новую технику с той, что уже получается: так результат будет твоим.", en: "Combine the new technique with one you already know: the result will feel like yours.", pt: "Combine a técnica nova com uma que você já domina: o resultado será seu.", es: "Combina la técnica nueva con una que ya dominas: el resultado será tuyo." } },
+        ],
+        options: [
+          { label: { ru: "Составить план", en: "Make a plan", pt: "Fazer um plano", es: "Hacer un plan" }, next: "plan" },
+          { label: { ru: "Подумать ещё", en: "Think more", pt: "Pensar mais", es: "Pensar más" }, next: "more" },
+        ],
+        next: "plan",
+      },
+      more: {
+        text: {
+          ru: "Хорошо, покрутим ещё. Представь готовую вещь через год: где она лежит, кто её трогает, что с ней стало? Иногда такой взгляд подсказывает материал и форму лучше любых списков.",
+          en: "Okay, let's turn it some more. Picture the finished piece a year from now: where is it, who touches it, what happened to it? Sometimes that view suggests material and form better than any list.",
+          pt: "Certo, vamos girar mais. Imagine a peça pronta daqui a um ano: onde está, quem a toca, o que aconteceu com ela? Às vezes isso sugere material e forma melhor que qualquer lista.",
+          es: "Bien, démosle otra vuelta. Imagina la pieza terminada dentro de un año: ¿dónde está, quién la toca, qué le pasó? A veces eso sugiere material y forma mejor que cualquier lista.",
+        },
+        next: "plan",
+      },
+      plan: {
+        text: {
+          ru: "Вот черновой план — поправь под себя:\n\n1. Собрать референсы и сделать 2–3 эскиза\n2. Подготовить материалы и инструменты\n3. Сделать пробный образец\n4. Основная работа\n5. Отделка и фото результата\n\nНажми «Создать проект», чтобы сохранить идею и план — к ним можно будет вернуться.",
+          en: "Here's a rough plan — adjust it:\n\n1. Gather references and make 2–3 sketches\n2. Prepare materials and tools\n3. Make a test piece\n4. Main work\n5. Finishing and photos of the result\n\nPress “Create project” to keep the idea and the plan — you can come back to them.",
+          pt: "Aqui vai um plano inicial — ajuste:\n\n1. Reunir referências e fazer 2–3 esboços\n2. Preparar materiais e ferramentas\n3. Fazer uma amostra\n4. Trabalho principal\n5. Acabamento e fotos do resultado\n\nToque em “Criar projeto” para guardar a ideia e o plano — dá para voltar a eles.",
+          es: "Aquí va un plan inicial, ajústalo:\n\n1. Reunir referencias y hacer 2–3 bocetos\n2. Preparar materiales y herramientas\n3. Hacer una muestra\n4. Trabajo principal\n5. Acabado y fotos del resultado\n\nPulsa «Crear proyecto» para guardar la idea y el plan; podrás volver a ellos.",
+        },
+        next: "end",
+      },
+      end: {
+        text: {
+          ru: "Я демо-сценарий и дальше могу только повторять общие советы. С подключённой языковой моделью разговор продолжился бы по-настоящему.",
+          en: "I'm a scripted demo and can only repeat general advice from here. With a connected language model the conversation would truly continue.",
+          pt: "Sou um roteiro de demonstração e daqui só posso repetir conselhos gerais. Com um modelo de linguagem conectado a conversa continuaria de verdade.",
+          es: "Soy un guion de demostración y a partir de aquí solo puedo repetir consejos generales. Con un modelo de lenguaje conectado la conversación seguiría de verdad.",
+        },
+      },
+    },
+  },
+  project: {
+    start: {
+      ru: "Продолжаем проект «{title}». Выполнено этапов: {done} из {total}. Что сейчас важнее всего — следующий шаг, материалы или застрял(а) на чём-то конкретном?",
+      en: "Let's continue the project “{title}”. Stages done: {done} of {total}. What matters most right now — the next step, materials, or are you stuck on something specific?",
+      pt: "Vamos continuar o projeto “{title}”. Etapas concluídas: {done} de {total}. O que importa mais agora — o próximo passo, os materiais ou travou em algo específico?",
+      es: "Sigamos con el proyecto «{title}». Etapas hechas: {done} de {total}. ¿Qué importa más ahora: el siguiente paso, los materiales o te has atascado en algo concreto?",
+    },
+    nodes: {
+      root: {
+        text: { ru: "", en: "", pt: "", es: "" },
+        options: [
+          { label: { ru: "Следующий шаг", en: "Next step", pt: "Próximo passo", es: "Siguiente paso" }, next: "next" },
+          { label: { ru: "Я застрял(а)", en: "I'm stuck", pt: "Travei", es: "Me he atascado" }, next: "stuck" },
+        ],
+        next: "next",
+      },
+      next: {
+        text: {
+          ru: "Следующий открытый этап — «{nextStep}». Разбей его на кусок на 30–60 минут и сделай только его. Что нужно подготовить заранее?",
+          en: "The next open stage is “{nextStep}”. Break it into a 30–60 minute chunk and do only that. What do you need to prepare in advance?",
+          pt: "A próxima etapa aberta é “{nextStep}”. Divida em um pedaço de 30–60 minutos e faça só ele. O que precisa preparar antes?",
+          es: "La siguiente etapa abierta es «{nextStep}». Divídela en un trozo de 30–60 minutos y haz solo eso. ¿Qué necesitas preparar antes?",
+        },
+        ideas: [
+          { title: { ru: "Подготовить место", en: "Prepare the workspace", pt: "Preparar o espaço", es: "Preparar el espacio" }, text: { ru: "Разложи материалы и инструменты для этапа заранее — начать будет проще.", en: "Lay out materials and tools for the stage in advance — starting gets easier.", pt: "Separe materiais e ferramentas da etapa antes — começar fica mais fácil.", es: "Prepara los materiales y herramientas de la etapa antes: empezar será más fácil." } },
+          { title: { ru: "Фото процесса", en: "Process photo", pt: "Foto do processo", es: "Foto del proceso" }, text: { ru: "Сфотографируй работу до и после этапа и добавь в проект — так виден прогресс.", en: "Photograph the work before and after the stage and add it to the project — progress becomes visible.", pt: "Fotografe antes e depois da etapa e adicione ao projeto — o progresso fica visível.", es: "Fotografía antes y después de la etapa y añádelo al proyecto: así se ve el progreso." } },
+        ],
+        next: "end",
+      },
+      stuck: {
+        text: {
+          ru: "Бывает. Опиши, что именно не получается, одной фразой. Часто помогает сделать шаг назад: пробный образец или упрощённая версия того же этапа. Запиши это в заметки проекта, чтобы не потерять.",
+          en: "It happens. Describe in one sentence what exactly isn't working. A step back often helps: a test piece or a simplified version of the same stage. Write it in the project notes so you don't lose it.",
+          pt: "Acontece. Descreva em uma frase o que não está dando certo. Dar um passo atrás costuma ajudar: uma amostra ou uma versão simplificada da etapa. Anote nas notas do projeto.",
+          es: "Pasa. Describe en una frase qué no funciona. Dar un paso atrás suele ayudar: una muestra o una versión simplificada de la etapa. Anótalo en las notas del proyecto.",
+        },
+        next: "end",
+      },
+      end: {
+        text: {
+          ru: "Сохрани полезные советы в проект кнопкой под сообщением. Это демо-сценарий: с подключённой языковой моделью я бы учитывал(а) все детали проекта.",
+          en: "Save useful advice to the project with the button under a message. This is a scripted demo: with a connected language model I'd take every project detail into account.",
+          pt: "Salve os conselhos úteis no projeto com o botão sob a mensagem. Este é um roteiro de demonstração: com um modelo de linguagem conectado eu consideraria todos os detalhes.",
+          es: "Guarda los consejos útiles en el proyecto con el botón bajo el mensaje. Es un guion de demostración: con un modelo de lenguaje conectado tendría en cuenta todos los detalles.",
         },
       },
     },
@@ -413,22 +525,25 @@ const S: Record<AIScenario, Script> = {
 const k = (locale: Locale): keyof L => (locale === "pt-BR" ? "pt" : locale === "es" ? "es" : locale === "ru" ? "ru" : "en");
 
 let seq = 0;
-function render(scenario: AIScenario, nodeId: string, locale: Locale): AITurnOutput {
+type Vars = Record<string, string | number>;
+const fill = (text: string, vars?: Vars) => (vars ? text.replace(/\{(\w+)\}/g, (m, key: string) => (vars[key] !== undefined ? String(vars[key]) : m)) : text);
+
+function render(scenario: AIScenario, nodeId: string, locale: Locale, vars?: Vars): AITurnOutput {
   const node = S[scenario].nodes[nodeId];
   const lk = k(locale);
   const ideas: IdeaCard[] | undefined = node.ideas?.map((i) => ({ id: `idea_${Date.now()}_${seq++}`, title: i.title[lk], text: i.text[lk] }));
   return {
-    text: node.text[lk],
+    text: fill(node.text[lk], vars),
     ideas,
     options: node.options?.map((o) => ({ label: o.label[lk], next: o.next })),
     nodeId,
   };
 }
 
-export function demoStart(scenario: AIScenario, locale: Locale): AITurnOutput {
+export function demoStart(scenario: AIScenario, locale: Locale, vars?: Vars): AITurnOutput {
   const lk = k(locale);
   const root = S[scenario].nodes.root;
-  return { text: S[scenario].start[lk], options: root.options?.map((o) => ({ label: o.label[lk], next: o.next })), nodeId: "root" };
+  return { text: fill(S[scenario].start[lk], vars), options: root.options?.map((o) => ({ label: o.label[lk], next: o.next })), nodeId: "root" };
 }
 
 export const demoProvider: AIProvider = {
@@ -438,7 +553,8 @@ export const demoProvider: AIProvider = {
     const script = S[input.scenario];
     const cur = input.nodeId ? script.nodes[input.nodeId] : script.nodes.root;
     const nextId = input.optionNext ?? cur?.next ?? "end";
-    if (!script.nodes[nextId]) return render(input.scenario, "end", input.locale);
-    return render(input.scenario, nextId, input.locale);
+    const vars = { idea: input.userText.trim().replace(/\s+/g, " ").slice(0, 80), ...(input.vars ?? {}) };
+    if (!script.nodes[nextId]) return render(input.scenario, "end", input.locale, vars);
+    return render(input.scenario, nextId, input.locale, vars);
   },
 };

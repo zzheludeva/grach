@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 const LANG: Record<string, string> = { ru: "Russian", en: "English", "pt-BR": "Brazilian Portuguese", es: "Spanish" };
 
-const SYSTEM = `You are the creative partner in "Remeslo AI Studio", a community for people who make things by hand.
+const SYSTEM = `You are the creative partner in "GRACH AI Studio", a community for people who make things by hand.
 Your method is "creative ping-pong": you do not hand over finished ideas. You ask one or two focused questions at a time,
 help the person explore options, suggest unexpected combinations of techniques and materials, and build on THEIR initial idea.
 When you do offer directions, give at most three short, concrete options and ask which one resonates.
@@ -30,7 +30,21 @@ interface Body {
   scenario: string;
   history: { role: "user" | "assistant"; text: string }[];
   postContext?: { title: string; body: string; category?: string };
+  projectContext?: {
+    title?: string;
+    idea?: string;
+    description?: string;
+    technique?: string;
+    materials?: string[];
+    tools?: string[];
+    done?: string[];
+    open?: string[];
+    notes?: string[];
+  };
 }
+
+const clip = (v: unknown, n = 400) => (typeof v === "string" ? v.slice(0, n) : "");
+const list = (v: unknown, n = 20) => (Array.isArray(v) ? v.slice(0, n).map((x) => clip(x, 200)).filter(Boolean) : []);
 
 export async function POST(req: Request) {
   const anthropic = client();
@@ -51,6 +65,15 @@ export async function POST(req: Request) {
     ? `\nThe person wants to discuss a community post. Title: "${body.postContext.title}". Description: "${body.postContext.body}".`
     : "";
 
+  const pc = body.projectContext;
+  const projectContext = pc
+    ? `\nThe person is continuing their own project. Use this context, do not repeat it back verbatim.
+Project: "${clip(pc.title, 120)}". Original idea: "${clip(pc.idea)}". Description: "${clip(pc.description)}".
+Technique: ${clip(pc.technique, 80) || "not set"}. Materials: ${list(pc.materials).join(", ") || "not set"}. Tools: ${list(pc.tools).join(", ") || "not set"}.
+Completed stages: ${list(pc.done).join("; ") || "none"}. Open stages: ${list(pc.open).join("; ") || "none"}.
+The person's notes: ${list(pc.notes, 10).join(" | ") || "none"}.`
+    : "";
+
   try {
     const response = await anthropic.beta.messages.create({
       model: "claude-opus-5-5",
@@ -58,7 +81,7 @@ export async function POST(req: Request) {
       output_config: { effort: "low" },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: `${SYSTEM}\nAlways answer in ${LANG[body.locale] ?? "English"}. Scenario: ${body.scenario}.${context}`,
+      system: `${SYSTEM}\nAlways answer in ${LANG[body.locale] ?? "English"}. Scenario: ${clip(body.scenario, 20)}.${context}${projectContext}`,
       messages: history.map((m) => ({ role: m.role, content: m.text })),
     });
 

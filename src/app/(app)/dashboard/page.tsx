@@ -89,19 +89,18 @@ export default function Dashboard() {
                 <p className="font-bold text-ink">{t("dashboard.step1")}</p>
                 <p className="text-xs text-muted">{t("dashboard.step1Text")}</p>
               </button>
-              <Link href="/market" className="rounded-2xl border border-line p-4 hover:border-ink/40">
+              <Link href="/dashboard/products/new" className="rounded-2xl border border-line p-4 hover:border-ink/40">
                 <Store className="mb-2 size-5 text-teal" />
                 <p className="font-bold text-ink">{t("dashboard.step2")}</p>
                 <p className="text-xs text-muted">{t("dashboard.step2Text")}</p>
               </Link>
-              <Link href="/learn?tab=workshops" className="rounded-2xl border border-line p-4 hover:border-ink/40">
+              <Link href="/dashboard/events/new" className="rounded-2xl border border-line p-4 hover:border-ink/40">
                 <GraduationCap className="mb-2 size-5 text-saffron" />
                 <p className="font-bold text-ink">{t("dashboard.step3")}</p>
                 <p className="text-xs text-muted">{t("dashboard.step3Text")}</p>
               </Link>
             </div>
           </div>
-          <p className="border-t border-line px-5 py-3 text-xs text-muted">{t("dashboard.sellingSoon")}</p>
         </Card>
       )}
 
@@ -331,9 +330,14 @@ export default function Dashboard() {
           {a.myTutorials.length > 0 && (
             <p className="mt-3 text-xs text-muted">{t("dashboard.tutorialsSold", { count: d.tutorialPurchases.filter((p) => a.myTutorials.some((x) => x.id === p.tutorialId)).length })}</p>
           )}
-          <ButtonLink href={`/profile/${me!.username}`} variant="ghost" size="sm" className="mt-3">
-            {t("dashboard.viewProfile")}
-          </ButtonLink>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <ButtonLink href="/dashboard/events" variant="soft" size="sm">
+              {t("nav.myEvents")}
+            </ButtonLink>
+            <ButtonLink href={`/profile/${me!.username}`} variant="ghost" size="sm">
+              {t("dashboard.viewProfile")}
+            </ButtonLink>
+          </div>
         </Card>
       </div>
     </div>

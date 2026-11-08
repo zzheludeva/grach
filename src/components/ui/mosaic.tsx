@@ -1,4 +1,6 @@
+"use client";
 import { hashStr, cn } from "@/lib/utils";
+import { useI18nOptional } from "@/i18n/I18nProvider";
 
 const PALETTE = ["#f66483", "#ff9f00", "#be6334", "#15484c", "#30b8b2", "#ffffff"];
 
@@ -36,7 +38,14 @@ export function Mosaic({ seed = "remeslo", cols = 14, rows = 5, className, light
   );
 }
 
+/** Brand: ГРАЧ for the Russian interface, GRACH for all other languages. */
+export function useBrandName() {
+  const i18n = useI18nOptional();
+  return i18n ? i18n.t("brand.name") : "GRACH";
+}
+
 export function Logo({ className, withText = true, light = false }: { className?: string; withText?: boolean; light?: boolean }) {
+  const name = useBrandName();
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
@@ -45,7 +54,7 @@ export function Logo({ className, withText = true, light = false }: { className?
         <path d="M3 17 L15 17.5 L14 30 L2 29 Z" fill="#30b8b2" />
         <path d="M17.5 17 L29.5 18 L30 30 L18 29.5 Z" fill="#be6334" />
       </svg>
-      {withText && <span className={cn("font-display text-[26px] leading-none", light ? "text-white" : "text-ink")}>Remeslo</span>}
+      {withText && <span className={cn("font-display text-[26px] leading-none", light ? "text-white" : "text-ink")}>{name}</span>}
     </span>
   );
 }

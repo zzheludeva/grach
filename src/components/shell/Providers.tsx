@@ -10,7 +10,7 @@ function Bridge({ children }: { children: React.ReactNode }) {
   if (!ready || !state) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-6">
-        <Logo />
+        <Logo withText={false} />
         <Spinner />
       </div>
     );

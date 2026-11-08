@@ -108,7 +108,7 @@ export default function Onboarding() {
       </aside>
       <main className="flex min-w-0 flex-col px-4 py-6 sm:px-10">
         <div className="flex items-center justify-between">
-          <Link href="/welcome" aria-label="Remeslo">
+          <Link href="/welcome" aria-label="GRACH">
             <Logo />
           </Link>
           <span className="text-sm font-semibold text-muted">{t("onb.stepOf", { step: step + 1, total: 5 })}</span>

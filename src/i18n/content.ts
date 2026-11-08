@@ -73,3 +73,55 @@ export function contentLangName(code: string, locale: Locale) {
 export function sameLang(contentLang: string, locale: Locale) {
   return contentLang.split("-")[0] === locale.split("-")[0];
 }
+
+/**
+ * Techniques — a shared vocabulary used by products, posts, tutorials and search filters.
+ * In production this maps to a `techniques` table with translations.
+ */
+type N = Record<Locale, string>;
+export const TECHNIQUES: { id: string; cats: CategoryId[]; name: N }[] = [
+  { id: "wheel", cats: ["pottery", "ceramics"], name: { ru: "Гончарный круг", en: "Wheel throwing", "pt-BR": "Torno", es: "Torno" } },
+  { id: "handbuilding", cats: ["ceramics", "pottery"], name: { ru: "Ручная лепка", en: "Hand-building", "pt-BR": "Modelagem manual", es: "Modelado a mano" } },
+  { id: "sgraffito", cats: ["ceramics"], name: { ru: "Сграффито", en: "Sgraffito", "pt-BR": "Sgraffito", es: "Esgrafiado" } },
+  { id: "glazing", cats: ["ceramics", "pottery"], name: { ru: "Глазурование", en: "Glazing", "pt-BR": "Esmaltação", es: "Esmaltado" } },
+  { id: "knitting", cats: ["knitting"], name: { ru: "Вязание спицами", en: "Needle knitting", "pt-BR": "Tricô", es: "Punto con agujas" } },
+  { id: "crochet", cats: ["knitting"], name: { ru: "Вязание крючком", en: "Crochet", "pt-BR": "Crochê", es: "Ganchillo" } },
+  { id: "dyeing", cats: ["knitting", "sewing"], name: { ru: "Окрашивание", en: "Dyeing", "pt-BR": "Tingimento", es: "Teñido" } },
+  { id: "sewing", cats: ["sewing", "upcycling"], name: { ru: "Шитьё", en: "Sewing", "pt-BR": "Costura", es: "Costura" } },
+  { id: "patchwork", cats: ["sewing"], name: { ru: "Пэчворк", en: "Patchwork", "pt-BR": "Patchwork", es: "Patchwork" } },
+  { id: "reworking", cats: ["upcycling"], name: { ru: "Переделка вещей", en: "Reworking", "pt-BR": "Reaproveitamento", es: "Reutilización" } },
+  { id: "satin", cats: ["embroidery"], name: { ru: "Гладь", en: "Satin stitch", "pt-BR": "Ponto cheio", es: "Punto relleno" } },
+  { id: "freeEmbroidery", cats: ["embroidery"], name: { ru: "Свободная вышивка", en: "Free embroidery", "pt-BR": "Bordado livre", es: "Bordado libre" } },
+  { id: "chainmaille", cats: ["jewelry"], name: { ru: "Кольчужное плетение", en: "Chainmaille", "pt-BR": "Chainmaille", es: "Cota de malla" } },
+  { id: "metalsmithing", cats: ["jewelry"], name: { ru: "Ювелирная обработка металла", en: "Metalsmithing", "pt-BR": "Ourivesaria", es: "Orfebrería" } },
+  { id: "beading", cats: ["jewelry"], name: { ru: "Бисероплетение", en: "Beading", "pt-BR": "Miçangas", es: "Abalorios" } },
+  { id: "polymerClay", cats: ["jewelry"], name: { ru: "Полимерная глина", en: "Polymer clay", "pt-BR": "Argila polimérica", es: "Arcilla polimérica" } },
+  { id: "watercolor", cats: ["painting"], name: { ru: "Акварель", en: "Watercolour", "pt-BR": "Aquarela", es: "Acuarela" } },
+  { id: "acrylic", cats: ["painting"], name: { ru: "Акрил", en: "Acrylic", "pt-BR": "Acrílica", es: "Acrílico" } },
+  { id: "oil", cats: ["painting"], name: { ru: "Масло", en: "Oil", "pt-BR": "Óleo", es: "Óleo" } },
+  { id: "mosaic", cats: ["painting", "other"], name: { ru: "Мозаика", en: "Mosaic", "pt-BR": "Mosaico", es: "Mosaico" } },
+  { id: "carving", cats: ["woodwork"], name: { ru: "Резьба", en: "Carving", "pt-BR": "Entalhe", es: "Talla" } },
+  { id: "turning", cats: ["woodwork"], name: { ru: "Токарная работа", en: "Woodturning", "pt-BR": "Torneamento", es: "Torneado" } },
+  { id: "origami", cats: ["paper"], name: { ru: "Оригами", en: "Origami", "pt-BR": "Origami", es: "Origami" } },
+  { id: "bookbinding", cats: ["paper"], name: { ru: "Переплёт", en: "Bookbinding", "pt-BR": "Encadernação", es: "Encuadernación" } },
+  { id: "papercut", cats: ["paper"], name: { ru: "Вырезание из бумаги", en: "Paper cutting", "pt-BR": "Recorte em papel", es: "Papel recortado" } },
+  { id: "felting", cats: ["other"], name: { ru: "Валяние", en: "Felting", "pt-BR": "Feltragem", es: "Fieltro" } },
+  { id: "macrame", cats: ["other"], name: { ru: "Макраме", en: "Macramé", "pt-BR": "Macramê", es: "Macramé" } },
+  { id: "weaving", cats: ["other"], name: { ru: "Ткачество", en: "Weaving", "pt-BR": "Tecelagem", es: "Tejido en telar" } },
+];
+
+/** Known technique ids get a translated name; free-text techniques are shown as written. */
+export function techniqueName(id: string | undefined, locale: Locale): string {
+  if (!id) return "";
+  const tq = TECHNIQUES.find((x) => x.id === id);
+  return tq ? tq.name[locale] ?? tq.name.en : id;
+}
+
+export function techniquesFor(cat?: CategoryId | "") {
+  return cat ? TECHNIQUES.filter((x) => x.cats.includes(cat)) : TECHNIQUES;
+}
+
+export function techniqueSearchTerms(id?: string): string[] {
+  const tq = TECHNIQUES.find((x) => x.id === id);
+  return tq ? Object.values(tq.name) : id ? [id] : [];
+}

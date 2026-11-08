@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
-import { Bell, Plus, Search, ShoppingCart, Settings, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil } from "lucide-react";
+import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { MAIN_NAV, USER_NAV } from "./nav";
-import { Logo } from "@/components/ui/mosaic";
+import { Logo, useBrandName } from "@/components/ui/mosaic";
 import { Avatar } from "@/components/ui/primitives";
 import { Dropdown, MenuItem } from "@/components/ui/menu";
 import { Button, IconButton } from "@/components/ui/button";
@@ -19,7 +19,8 @@ const ShellCtx = createContext<{ openComposer: (prefill?: { title?: string; body
 export const useShell = () => useContext(ShellCtx);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { state, me, meId } = useStore();
+  const { state, me, meId, storageError } = useStore();
+  const { t } = useI18n();
   const router = useRouter();
   const [composer, setComposer] = useState<{ open: boolean; prefill?: { title?: string; body?: string } }>({ open: false });
 
@@ -31,10 +32,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ShellCtx.Provider value={{ openComposer: (prefill) => setComposer({ open: true, prefill }) }}>
-      <div className="min-h-dvh lg:ps-[248px]">
-        <Sidebar onCompose={() => setComposer({ open: true })} />
+      <div className="min-h-dvh">
         <TopBar onCompose={() => setComposer({ open: true })} />
         <main className="mx-auto w-full max-w-[1240px] px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-6">
+          {storageError && (
+            <p role="alert" className="mb-4 rounded-xl border border-rose/40 bg-rose-soft px-3 py-2 text-sm font-semibold text-rose-deep">
+              {t("storage.full")}
+            </p>
+          )}
           <LangSuggestion />
           {children}
         </main>
@@ -50,60 +55,36 @@ function useActive() {
   return (href: string) => path === href || path.startsWith(href + "/");
 }
 
-function Sidebar({ onCompose }: { onCompose: () => void }) {
+/** Desktop: the five main sections as horizontal tabs, fixed under the header. */
+function SectionTabs() {
   const { t } = useI18n();
-  const { state, meId } = useStore();
   const active = useActive();
-  const d = state!.data;
-  const counts: Record<string, number> = { cart: cartCount(d, meId), notifications: unreadCount(d, meId) };
   return (
-    <aside className="fixed inset-y-0 start-0 z-40 hidden w-[248px] flex-col border-e border-line bg-surface lg:flex">
-      <Link href="/feed" className="flex h-[72px] items-center px-6" aria-label="Remeslo">
-        <Logo />
-      </Link>
-      <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label={t("nav.main")}>
-        <ul className="space-y-1">
-          {MAIN_NAV.map(({ href, key, icon: Icon }) => (
-            <li key={href}>
+    <nav className="hidden border-t border-line/70 lg:block" aria-label={t("nav.main")}>
+      <ul role="tablist" className="mx-auto flex max-w-[1240px] gap-1 px-8">
+        {MAIN_NAV.map(({ href, key, icon: Icon }) => {
+          const on = active(href);
+          return (
+            <li key={href} role="presentation">
               <Link
                 href={href}
+                role="tab"
+                aria-selected={on}
+                aria-current={on ? "page" : undefined}
                 className={cn(
-                  "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-semibold transition-colors",
-                  active(href) ? "bg-ink text-white" : "text-ink hover:bg-ink-soft/70",
+                  "relative flex h-12 items-center gap-2 px-4 text-[15px] font-semibold transition-colors",
+                  on ? "text-ink" : "text-muted hover:text-ink",
                 )}
               >
-                <Icon className={cn("size-5", active(href) ? "text-saffron" : "text-ink/70")} />
-                <span className="truncate">{t(`nav.${key}`)}</span>
+                <Icon className={cn("size-[18px]", on ? "text-rust" : "text-ink/50")} />
+                {t(`nav.${key}`)}
+                <span className={cn("absolute inset-x-3 -bottom-px h-[3px] rounded-t-full transition-colors", on ? "bg-saffron" : "bg-transparent")} aria-hidden />
               </Link>
             </li>
-          ))}
-        </ul>
-        <Button className="mt-4 w-full" variant="accent" onClick={onCompose}>
-          <Plus className="size-4" /> {t("nav.newPost")}
-        </Button>
-        <p className="mb-2 mt-7 px-3 text-[11px] font-bold uppercase tracking-[0.12em] text-faint">{t("nav.mine")}</p>
-        <ul className="space-y-0.5">
-          {USER_NAV.map(({ href, key, icon: Icon }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
-                  active(href) ? "bg-ink-soft text-ink" : "text-muted hover:bg-ink-soft/60 hover:text-ink",
-                )}
-              >
-                <Icon className="size-[18px]" />
-                <span className="min-w-0 flex-1 truncate">{t(`nav.${key}`)}</span>
-                {!!counts[key] && <span className="nums rounded-full bg-saffron px-1.5 text-[11px] font-bold text-ink-deep">{counts[key]}</span>}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="border-t border-line p-3">
-        <UserMenu side="top" full />
-      </div>
-    </aside>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
@@ -146,7 +127,12 @@ function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; 
           <MenuItem icon={<UserRound />} onClick={() => go(`/profile/${me.username}`, close)}>{t("nav.profile")}</MenuItem>
           <MenuItem icon={<Pencil />} onClick={() => go(`/profile/edit`, close)}>{t("nav.editProfile")}</MenuItem>
           <MenuItem icon={<Users />} onClick={() => go(`/connections/${me.username}?tab=followers`, close)}>{t("nav.connections")}</MenuItem>
-          <div className="lg:hidden">
+          <div className="my-1 h-px bg-line" />
+          <MenuItem icon={<FolderKanban />} onClick={() => go(`/dashboard/projects`, close)}>{t("nav.myProjects")}</MenuItem>
+          <MenuItem icon={<Store />} onClick={() => go(`/dashboard/products`, close)}>{t("nav.myProducts")}</MenuItem>
+          <MenuItem icon={<CalendarDays />} onClick={() => go(`/dashboard/events`, close)}>{t("nav.myEvents")}</MenuItem>
+          <div className="md:hidden">
+            <div className="my-1 h-px bg-line" />
             <MenuItem icon={<Bookmark />} onClick={() => go(`/favorites`, close)}>{t("nav.favorites")}</MenuItem>
             <MenuItem icon={<Package />} onClick={() => go(`/orders`, close)}>{t("nav.orders")}</MenuItem>
             <MenuItem icon={<MessageCircle />} onClick={() => go(`/messages`, close)}>{t("nav.messages")}</MenuItem>
@@ -167,20 +153,21 @@ function TopBar({ onCompose }: { onCompose: () => void }) {
   const { t } = useI18n();
   const { state, meId } = useStore();
   const router = useRouter();
+  const active = useActive();
+  const brand = useBrandName();
   const d = state!.data;
-  const cc = cartCount(d, meId);
-  const uc = unreadCount(d, meId);
+  const counts: Record<string, number> = { cart: cartCount(d, meId), notifications: unreadCount(d, meId) };
   const [q, setQ] = useState("");
   return (
-    <header className="sticky top-0 z-30 border-b border-line/80 bg-bg/85 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-line/80 bg-bg/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-2 px-4 sm:px-6 lg:px-8">
-        <Link href="/feed" className="lg:hidden" aria-label="Remeslo">
+        <Link href="/feed" className="shrink-0" aria-label={brand}>
           <Logo withText={false} className="sm:hidden" />
           <Logo className="hidden sm:inline-flex" />
         </Link>
         <form
           role="search"
-          className="relative ms-1 hidden min-w-0 flex-1 md:block lg:ms-0 lg:max-w-md"
+          className="relative ms-3 hidden min-w-0 flex-1 md:block lg:max-w-sm xl:max-w-md"
           onSubmit={(e) => {
             e.preventDefault();
             router.push(`/search?q=${encodeURIComponent(q)}`);
@@ -195,29 +182,51 @@ function TopBar({ onCompose }: { onCompose: () => void }) {
             className="h-10 w-full rounded-xl border border-line bg-surface ps-10 pe-3 text-sm placeholder:text-faint focus:border-teal focus:outline-none focus:ring-3 focus:ring-teal/20"
           />
         </form>
-        <div className="ms-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-0.5">
           <Link href="/search" className="inline-flex size-10 items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70 md:hidden" aria-label={t("nav.search")}>
             <Search className="size-5" />
           </Link>
+          <Button variant="accent" size="sm" onClick={onCompose} className="me-1 hidden lg:inline-flex">
+            <Plus className="size-4" /> {t("nav.newPost")}
+          </Button>
           <IconButton label={t("nav.newPost")} onClick={onCompose} className="lg:hidden">
             <Plus className="size-5" />
           </IconButton>
-          <Link href="/notifications" className="relative inline-flex size-10 items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70" aria-label={t("nav.notificationsCount", { count: uc })}>
-            <Bell className="size-5" />
-            {uc > 0 && <span className="nums absolute end-1.5 top-1.5 min-w-4 rounded-full bg-rose px-1 text-center text-[10px] font-bold leading-4 text-white">{uc}</span>}
-          </Link>
-          <Link href="/cart" className="relative inline-flex h-10 items-center gap-2 rounded-xl px-2.5 text-ink hover:bg-ink-soft/70" aria-label={t("nav.cartCount", { count: cc })}>
-            <ShoppingCart className="size-5" />
-            {cc > 0 && <span className="nums min-w-5 rounded-full bg-saffron px-1.5 text-center text-[11px] font-bold leading-5 text-ink-deep">{cc}</span>}
-          </Link>
-          <Link href="/settings" className="hidden size-10 items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70 lg:inline-flex" aria-label={t("nav.settings")}>
-            <Settings className="size-5" />
-          </Link>
-          <div className="ms-1 lg:hidden">
+          <nav aria-label={t("nav.account")} className="flex items-center gap-0.5">
+            {USER_NAV.map(({ href, key, icon: Icon }) => {
+              const n = counts[key] ?? 0;
+              // On phones only the cart and notifications stay in the bar; the rest live in the profile menu.
+              const phone = key === "cart" || key === "notifications";
+              const label = key === "cart" ? t("nav.cartCount", { count: n }) : key === "notifications" ? t("nav.notificationsCount", { count: n }) : t(`nav.${key}`);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-label={label}
+                  title={t(`nav.${key}`)}
+                  aria-current={active(href) ? "page" : undefined}
+                  className={cn(
+                    "relative size-10 items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70",
+                    phone ? "inline-flex" : "hidden md:inline-flex",
+                    active(href) && "bg-ink-soft",
+                  )}
+                >
+                  <Icon className="size-5" />
+                  {n > 0 && (
+                    <span className={cn("nums absolute end-1 top-1 min-w-4 rounded-full px-1 text-center text-[10px] font-bold leading-4", key === "cart" ? "bg-saffron text-ink-deep" : "bg-rose text-white")}>
+                      {n}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="ms-1">
             <UserMenu />
           </div>
         </div>
       </div>
+      <SectionTabs />
     </header>
   );
 }

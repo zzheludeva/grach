@@ -62,7 +62,7 @@ export default function FeedPage() {
           </div>
         </section>
 
-        <div className="sticky top-16 z-20 -mx-4 mb-5 space-y-3 bg-bg/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-16 z-20 lg:top-28 -mx-4 mb-5 space-y-3 bg-bg/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <Tabs
             value={mode}
             onChange={(m) => {
@@ -177,7 +177,7 @@ export default function FeedPage() {
           <p className="text-sm font-bold text-ink">{t("feed.upcoming")}</p>
           <div className="mt-3 space-y-3">
             {d.workshops
-              .filter((w) => new Date(w.startsAt).getTime() > Date.now())
+              .filter((w) => w.status === "published" && new Date(w.startsAt).getTime() > Date.now())
               .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
               .slice(0, 3)
               .map((w) => (

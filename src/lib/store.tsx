@@ -14,10 +14,14 @@ import type {
   Order,
   OrderStatus,
   Post,
+  Product,
+  Project,
   SavedIdea,
   Settings,
   User,
+  Workshop,
 } from "./types";
+import { eventAudience, significantChanges, durationMin } from "./workshops";
 import { DAY, uid } from "./utils";
 import { region } from "./regions";
 import { detectLocale } from "@/i18n/config";
@@ -32,7 +36,7 @@ import { nextStatus, canCancel } from "./orders";
 const STORAGE_KEY = "remeslo:v3";
 
 export interface AppState {
-  version: 3;
+  version: 4;
   sessionUserId: string | null;
   deviceLang: Locale;
   langSuggested: boolean;
@@ -47,7 +51,7 @@ function defaultSettings(country: CountryCode, lang: Locale, city?: string): Set
 
 function initialState(lang: Locale): AppState {
   return {
-    version: 3,
+    version: 4,
     sessionUserId: null,
     deviceLang: lang,
     langSuggested: true,
@@ -76,16 +80,22 @@ function useBuildStore() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) s = JSON.parse(raw) as AppState;
     } catch {}
-    if (!s || s.version !== 3) s = initialState(detectLocale(navigator.languages));
+    if (s && (s.version as number) === 3) s = migrateV3(s);
+    if (!s || s.version !== 4) s = initialState(detectLocale(navigator.languages));
     setState(s);
     loaded.current = true;
   }, []);
 
+  const [storageError, setStorageError] = useState(false);
   useEffect(() => {
     if (!state || !loaded.current) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+      setStorageError(false);
+    } catch {
+      // Usually the browser quota (photos are stored locally in the demo). Surface it — never fail silently.
+      setStorageError(true);
+    }
   }, [state]);
 
   const update = useCallback((fn: (d: SeedData, s: AppState) => Partial<SeedData> | void) => {
@@ -268,7 +278,7 @@ function useBuildStore() {
         if (!meId) return;
         update((d) => {
           const p = d.products.find((x) => x.id === productId);
-          if (!p || p.availability === "sold_out") return;
+          if (!p || p.status !== "published" || p.availability === "sold_out" || p.sellerId === meId) return;
           const cart = d.carts[meId] ?? [];
           const ex = cart.find((c) => c.productId === productId);
           const max = p.availability === "in_stock" ? p.stock : 10;
@@ -410,7 +420,7 @@ function useBuildStore() {
         let ok = false;
         update((d) => {
           const w = d.workshops.find((x) => x.id === workshopId);
-          if (!w || w.seatsTaken >= w.seatsTotal || d.enrollments.some((e) => e.userId === meId && e.workshopId === workshopId)) return;
+          if (!w || w.status !== "published" || w.seatsTaken >= w.seatsTotal || d.enrollments.some((e) => e.userId === meId && e.workshopId === workshopId)) return;
           ok = true;
           return {
             enrollments: [...d.enrollments, { userId: meId, workshopId, at: now() }],
@@ -469,8 +479,158 @@ function useBuildStore() {
         update((d) => ({ ideas: [{ ...idea, id, userId: meId, createdAt: now(), isProject: false }, ...d.ideas] }));
         return id;
       },
-      makeProject(ideaId: string) {
-        update((d) => ({ ideas: d.ideas.map((i) => (i.id === ideaId ? { ...i, isProject: true } : i)) }));
+      /* ---------- projects (personal, private by default) ---------- */
+      createProject(input: Partial<Omit<Project, "id" | "userId" | "createdAt" | "updatedAt">> & { title: string }, fromIdeaId?: string) {
+        if (!meId) return "";
+        const id = uid("prj");
+        const at = now();
+        const project: Project = {
+          description: "",
+          idea: "",
+          recommendations: [],
+          materials: [],
+          tools: [],
+          plan: [],
+          checklist: [],
+          notes: [],
+          photos: [],
+          status: "idea",
+          ...input,
+          id,
+          userId: meId,
+          createdAt: at,
+          updatedAt: at,
+        };
+        update((d) => ({
+          projects: [project, ...(d.projects ?? [])],
+          ideas: fromIdeaId ? d.ideas.map((i) => (i.id === fromIdeaId && i.userId === meId ? { ...i, isProject: true, projectId: id } : i)) : d.ideas,
+        }));
+        return id;
+      },
+      updateProject(id: string, patch: Partial<Project> | ((p: Project) => Partial<Project>)) {
+        if (!meId) return;
+        update((d) => ({
+          projects: d.projects.map((p) => {
+            if (p.id !== id || p.userId !== meId) return p; // only the owner can change a project
+            const ch = typeof patch === "function" ? patch(p) : patch;
+            const { id: _i, userId: _u, createdAt: _c, ...safe } = ch as Project;
+            return { ...p, ...safe, updatedAt: now() };
+          }),
+        }));
+      },
+      deleteProject(id: string) {
+        if (!meId) return;
+        update((d) => ({
+          projects: d.projects.filter((p) => !(p.id === id && p.userId === meId)),
+          ideas: d.ideas.map((i) => (i.projectId === id ? { ...i, isProject: false, projectId: undefined } : i)),
+          conversations: d.conversations.map((c) => (c.projectId === id ? { ...c, projectId: undefined } : c)),
+        }));
+      },
+
+      /* ---------- seller: products ---------- */
+      saveProduct(input: ProductInput, opts: { id?: string; status: Product["status"] }): { id: string } | { error: "forbidden" | "not_found" } {
+        const snap = stateRef.current;
+        if (!meId || !snap) return { error: "forbidden" };
+        const existing = opts.id ? snap.data.products.find((p) => p.id === opts.id) : undefined;
+        if (opts.id && !existing) return { error: "not_found" };
+        if (existing && existing.sellerId !== meId) return { error: "forbidden" };
+        const at = now();
+        const id = existing?.id ?? uid("pr");
+        const availability: Product["availability"] = input.saleType === "ready" ? (input.stock > 0 ? "in_stock" : "sold_out") : "made_to_order";
+        const author = snap.data.users.find((u) => u.id === meId);
+        const product: Product = {
+          ...(existing ?? { views: 0, createdAt: at, lang: author?.contentLang ?? "ru", story: "" }),
+          ...input,
+          id,
+          sellerId: meId,
+          availability,
+          status: opts.status,
+          updatedAt: at,
+        } as Product;
+        update((d) => ({ products: existing ? d.products.map((p) => (p.id === id ? product : p)) : [product, ...d.products] }));
+        return { id };
+      },
+      setProductStatus(id: string, status: Product["status"]) {
+        update((d) => ({ products: d.products.map((p) => (p.id === id && p.sellerId === meId ? { ...p, status, updatedAt: now() } : p)) }));
+      },
+      deleteProduct(id: string) {
+        update((d) => {
+          const p = d.products.find((x) => x.id === id);
+          if (!p || p.sellerId !== meId) return;
+          // Orders keep their own snapshot (title, photo, price), so history stays intact.
+          const carts = Object.fromEntries(Object.entries(d.carts).map(([u, items]) => [u, items.filter((c) => c.productId !== id)]));
+          return { products: d.products.filter((x) => x.id !== id), carts, favorites: d.favorites.filter((f) => !(f.type === "product" && f.id === id)) };
+        });
+      },
+      viewProduct(id: string) {
+        update((d) => {
+          const p = d.products.find((x) => x.id === id);
+          if (!p || p.sellerId === meId || p.status !== "published") return;
+          return { products: d.products.map((x) => (x.id === id ? { ...x, views: x.views + 1 } : x)) };
+        });
+      },
+
+      /* ---------- host: workshops & events ---------- */
+      /** Saves a draft, publishes, or edits. Significant edits of a published event notify its audience once per person. */
+      saveWorkshop(input: WorkshopInput, opts: { id?: string; publish: boolean }): { id: string; notified: number } | { error: "forbidden" | "not_found" } {
+        const snap = stateRef.current;
+        if (!meId || !snap) return { error: "forbidden" };
+        const existing = opts.id ? snap.data.workshops.find((w) => w.id === opts.id) : undefined;
+        if (opts.id && !existing) return { error: "not_found" };
+        if (existing && existing.hostId !== meId) return { error: "forbidden" };
+        const at = now();
+        const id = existing?.id ?? uid("w");
+        const author = snap.data.users.find((u) => u.id === meId);
+        const status: Workshop["status"] = opts.publish ? "published" : existing?.status === "published" ? "published" : "draft";
+        const next: Workshop = {
+          ...(existing ?? { seatsTaken: 0, createdAt: at, lang: author?.contentLang ?? "ru" }),
+          ...input,
+          id,
+          hostId: meId,
+          status,
+          durationMin: durationMin(input),
+          updatedAt: at,
+        } as Workshop;
+        let notes: AppNotification[] = [];
+        if (existing?.status === "published" && status === "published") {
+          const changes = significantChanges(existing, next);
+          if (changes.length) {
+            notes = eventAudience(snap.data, next).map((userId) => ({
+              id: uid("n"),
+              userId,
+              type: "workshop" as const,
+              actorId: meId,
+              key: "eventChanged",
+              params: { title: next.title },
+              href: `/learn/workshop/${id}`,
+              changes,
+              at,
+              read: false,
+            }));
+          }
+        }
+        update((d) => ({
+          workshops: existing ? d.workshops.map((w) => (w.id === id ? next : w)) : [next, ...d.workshops],
+          notifications: [...notes, ...d.notifications.filter((n) => !notes.some((x) => x.id === n.id))],
+        }));
+        return { id, notified: notes.length };
+      },
+      cancelWorkshop(id: string): number {
+        const snap = stateRef.current;
+        const w = snap?.data.workshops.find((x) => x.id === id);
+        if (!meId || !snap || !w || w.hostId !== meId || w.status !== "published") return 0;
+        const at = now();
+        const notes: AppNotification[] = eventAudience(snap.data, w).map((userId) => ({
+          id: uid("n"), userId, type: "workshop" as const, actorId: meId, key: "eventCancelled", params: { title: w.title }, href: `/learn/workshop/${id}`, at, read: false,
+        }));
+        update((d) => ({
+          workshops: d.workshops.map((x) => (x.id === id ? { ...x, status: "cancelled" as const, cancelledAt: at, updatedAt: at } : x)),
+          notifications: [...notes, ...d.notifications.filter((n) => !notes.some((x) => x.id === n.id))],
+        }));
+        return notes.length;
+      },
+      deleteWorkshopDraft(id: string) {
+        update((d) => ({ workshops: d.workshops.filter((w) => !(w.id === id && w.hostId === meId && w.status === "draft")) }));
       },
       deleteIdea(ideaId: string) {
         update((d) => ({ ideas: d.ideas.filter((i) => i.id !== ideaId) }));
@@ -487,7 +647,59 @@ function useBuildStore() {
     [meId, update, notify, state?.deviceLang],
   );
 
-  return { state, ready: state !== null, me, meId, settings, actions };
+  return { state, ready: state !== null, me, meId, settings, actions, storageError };
+}
+
+export type ProductInput = Omit<Product, "id" | "sellerId" | "availability" | "status" | "createdAt" | "updatedAt" | "views" | "lang" | "story"> & { story?: string };
+export type WorkshopInput = Omit<Workshop, "id" | "hostId" | "status" | "seatsTaken" | "createdAt" | "updatedAt" | "durationMin" | "lang" | "cancelledAt">;
+
+/** Upgrades a v3 demo database in place: keeps every user change, fills new fields, adds new demo records. */
+function migrateV3(old: AppState): AppState {
+  const fresh = buildSeed();
+  const d = old.data as SeedData & { projects?: Project[] };
+  const techOf = new Map<string, string | undefined>([
+    ...fresh.posts.map((p) => [p.id, p.technique] as const),
+    ...fresh.products.map((p) => [p.id, p.technique] as const),
+    ...fresh.tutorials.map((p) => [p.id, p.technique] as const),
+  ]);
+  const products = d.products.map((p) => ({
+    ...p,
+    status: p.status ?? "published",
+    saleType: p.saleType ?? (p.availability === "made_to_order" ? "to_order" : "ready"),
+    technique: p.technique ?? techOf.get(p.id),
+  })) as Product[];
+  const workshops = d.workshops.map((w) => ({
+    ...w,
+    kind: w.kind ?? (w.id === "w6" ? "event" : "workshop"),
+    status: w.status ?? "published",
+    endsAt: w.endsAt ?? new Date(new Date(w.startsAt).getTime() + w.durationMin * 60000).toISOString(),
+    createdAt: w.createdAt ?? w.startsAt,
+    updatedAt: w.updatedAt ?? w.startsAt,
+    level: w.level ?? "any",
+  })) as Workshop[];
+  const addMissing = <T extends { id: string }>(list: T[], extra: T[]) => [...list, ...extra.filter((x) => !list.some((y) => y.id === x.id))];
+  let projects: Project[] = d.projects ?? [];
+  const ideas = d.ideas.map((i) => {
+    if (!i.isProject || i.projectId) return i;
+    const pid = i.id === "i1" ? "prj1" : `prj_${i.id}`;
+    if (pid !== "prj1") {
+      projects = [...projects, { id: pid, userId: i.userId, title: i.title, description: i.text, idea: i.text, recommendations: [], materials: [], tools: [], plan: [], checklist: [], notes: [], photos: [], conversationId: i.conversationId, status: "idea", createdAt: i.createdAt, updatedAt: i.createdAt }];
+    }
+    return { ...i, projectId: pid };
+  });
+  return {
+    ...old,
+    version: 4,
+    data: {
+      ...d,
+      posts: d.posts.map((p) => ({ ...p, technique: p.technique ?? techOf.get(p.id) })),
+      tutorials: d.tutorials.map((x) => ({ ...x, technique: x.technique ?? techOf.get(x.id), format: x.format ?? "steps" })),
+      products: addMissing(products, fresh.products.filter((p) => p.id === "pr17")),
+      workshops: addMissing(workshops, fresh.workshops.filter((w) => w.id === "w7" || w.id === "w8")),
+      projects: addMissing(projects, fresh.projects),
+      ideas,
+    },
+  };
 }
 
 function bumpCat(d: SeedData, userId: string, cat: string, by: number) {

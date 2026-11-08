@@ -11,8 +11,8 @@ import { likeCount } from "./selectors";
 export function authorAnalytics(d: SeedData, me: string, periodDays: number, currency: CurrencyCode) {
   const since = Date.now() - periodDays * DAY;
   const inPeriod = (iso: string) => new Date(iso).getTime() >= since;
-  const myProducts = d.products.filter((p) => p.sellerId === me);
-  const myWorkshops = d.workshops.filter((w) => w.hostId === me);
+  const myProducts = d.products.filter((p) => p.sellerId === me && p.status !== "draft");
+  const myWorkshops = d.workshops.filter((w) => w.hostId === me && w.status !== "draft");
   const myTutorials = d.tutorials.filter((t) => t.authorId === me);
   const sales = d.orders.filter((o) => o.sellerId === me && o.status !== "cancelled");
   const salesP = sales.filter((o) => inPeriod(o.createdAt) && o.subtotal.currency === currency);

@@ -137,7 +137,7 @@ export default function CartPage() {
             </Card>
           ))}
         </div>
-        <aside className="lg:sticky lg:top-20 lg:h-fit">
+        <aside className="lg:sticky lg:top-32 lg:h-fit">
           <Card className="space-y-3 p-5">
             <p className="text-lg font-bold text-ink">{t("cart.summary")}</p>
             <div className="flex justify-between text-sm">

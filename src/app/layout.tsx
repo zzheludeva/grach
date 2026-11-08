@@ -7,7 +7,7 @@ const pie = localFont({ src: "../fonts/UnlimitedPie.ttf", variable: "--font-pie"
 const raleway = localFont({ src: "../fonts/Raleway.ttf", variable: "--font-raleway", display: "swap", weight: "100 900" });
 
 export const metadata: Metadata = {
-  title: "Remeslo — пробуй новое, работай руками",
+  title: "GRACH",
   description: "Творческое сообщество и экосистема handmade: вдохновение, обучение, маркетплейс и ИИ-студия.",
 };
 

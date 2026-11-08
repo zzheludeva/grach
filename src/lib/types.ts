@@ -58,6 +58,7 @@ export interface Post {
   translations?: Partial<Record<Locale, { title: string; body: string }>>;
   views: number;
   videoLength?: string;
+  technique?: string;
 }
 
 export interface Comment {
@@ -89,6 +90,15 @@ export interface Favorite {
 }
 
 export type Availability = "in_stock" | "made_to_order" | "sold_out";
+export type ProductStatus = "draft" | "published" | "hidden";
+export type SaleType = "ready" | "to_order" | "personalized";
+export type ShippingMode = "region" | "fixed" | "free";
+export interface ProductShipping {
+  mode: ShippingMode;
+  /** Seller-defined cost in the product currency (mode = fixed). */
+  cost?: number;
+  terms?: string;
+}
 
 export interface Product {
   id: string;
@@ -110,6 +120,13 @@ export interface Product {
   createdAt: string;
   lang: string;
   views: number;
+  /** Only published products appear in the catalogue; drafts and hidden ones are visible to the seller. */
+  status: ProductStatus;
+  saleType: SaleType;
+  technique?: string;
+  specs?: { label: string; value: string }[];
+  shipping?: ProductShipping;
+  updatedAt?: string;
 }
 
 export type Level = "beginner" | "intermediate" | "advanced";
@@ -136,7 +153,14 @@ export interface Tutorial {
   reviews: Review[];
   lang: string;
   createdAt: string;
+  technique?: string;
+  format?: "steps" | "video";
 }
+
+export type WorkshopKind = "workshop" | "event";
+export type WorkshopStatus = "draft" | "published" | "cancelled";
+/** Lifecycle shown to people: "completed" is derived from the end time of a published event. */
+export type WorkshopPhase = WorkshopStatus | "completed";
 
 export interface Workshop {
   id: string;
@@ -157,6 +181,17 @@ export interface Workshop {
   description: string;
   program: string[];
   lang: string;
+  kind: WorkshopKind;
+  status: WorkshopStatus;
+  endsAt: string;
+  /** Visible only to enrolled participants and the host. */
+  onlineUrl?: string;
+  level?: Level | "any";
+  materials?: string[];
+  terms?: string;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt?: string;
 }
 
 export interface Enrollment {
@@ -244,7 +279,7 @@ export interface AIMessage {
   at: string;
 }
 
-export type AIScenario = "idea" | "develop" | "explore" | "block" | "plan" | "post";
+export type AIScenario = "idea" | "develop" | "explore" | "block" | "plan" | "post" | "free" | "project";
 
 export interface AIConversation {
   id: string;
@@ -254,6 +289,8 @@ export interface AIConversation {
   nodeId: string | null;
   mode: "demo" | "live";
   contextPostId?: string;
+  /** Conversation continues a project: the assistant receives the project's context. */
+  projectId?: string;
   messages: AIMessage[];
   createdAt: string;
   updatedAt: string;
@@ -267,7 +304,40 @@ export interface SavedIdea {
   tags: string[];
   conversationId?: string;
   isProject: boolean;
+  projectId?: string;
   createdAt: string;
+}
+
+export type ProjectStatus = "idea" | "planning" | "in_progress" | "paused" | "done";
+export interface ProjectItem {
+  id: string;
+  text: string;
+  done?: boolean;
+  at: string;
+}
+export interface Project {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  /** The person's original idea, as they phrased it. */
+  idea: string;
+  cover?: string;
+  category?: CategoryId;
+  technique?: string;
+  recommendations: (ProjectItem & { conversationId?: string })[];
+  materials: string[];
+  tools: string[];
+  plan: ProjectItem[];
+  checklist: ProjectItem[];
+  notes: ProjectItem[];
+  photos: { id: string; src: string; at: string; final: boolean }[];
+  conversationId?: string;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+  publishedPostId?: string;
+  productId?: string;
 }
 
 export type NotificationType = "like" | "comment" | "follow" | "order" | "workshop" | "system";
@@ -281,6 +351,8 @@ export interface AppNotification {
   href?: string;
   at: string;
   read: boolean;
+  /** For event updates: old and new raw values; formatted for the reader's locale and time zone. */
+  changes?: { field: string; from: string; to: string }[];
 }
 
 export interface Message {

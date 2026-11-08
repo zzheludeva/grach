@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, MapPin, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
-import { cartGroups } from "@/lib/cart";
+import { cartGroups, groupShippingCost } from "@/lib/cart";
 import { sumByCurrency } from "@/lib/selectors";
-import { applyPhoneMask, deliveryCost, formatAddressLines, region } from "@/lib/regions";
+import { applyPhoneMask, formatAddressLines, region } from "@/lib/regions";
 import { Card, DemoNote, EmptyState, Field, Input, PageHeader } from "@/components/ui/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -39,7 +39,7 @@ export default function Checkout() {
 
   const address = addrId === "new" ? fields : saved.find((a) => a.id === addrId)?.fields ?? {};
   const shipping = useMemo(
-    () => groups.map((g) => ({ g, cost: deliveryCost(country, method, g.currency) })),
+    () => groups.map((g) => ({ g, cost: groupShippingCost(g, country, method) })),
     [groups, country, method],
   );
   const totals = sumByCurrency(shipping.flatMap(({ g, cost }) => [{ amount: g.subtotal, currency: g.currency }, { amount: step >= 2 ? cost ?? 0 : 0, currency: g.currency }]));
@@ -280,7 +280,7 @@ export default function Checkout() {
             )}
           </div>
         </Card>
-        <aside className="lg:sticky lg:top-20 lg:h-fit">
+        <aside className="lg:sticky lg:top-32 lg:h-fit">
           <Card className="space-y-3 p-5">
             <p className="font-bold text-ink">{t("cart.summary")}</p>
             {shipping.map(({ g, cost }) => (

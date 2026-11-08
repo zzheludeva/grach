@@ -19,6 +19,7 @@ import type {
   Address,
   AIConversation,
   Review,
+  Project,
 } from "@/lib/types";
 import { DAY, HOUR, hashStr } from "@/lib/utils";
 
@@ -32,6 +33,17 @@ export function buildSeed(now = Date.now()) {
     const x = new Date(now + d * DAY);
     x.setUTCHours(utcHour, 0, 0, 0);
     return x.toISOString();
+  };
+
+  /** Techniques of seeded content (ids from i18n/content TECHNIQUES). */
+  const TECH: Record<string, string> = {
+    p1: "glazing", p2: "wheel", p3: "knitting", p4: "dyeing", p5: "felting", p6: "freeEmbroidery", p7: "turning", p8: "bookbinding",
+    p9: "reworking", p10: "watercolor", p11: "chainmaille", p12: "macrame", p13: "acrylic", p14: "sgraffito", p15: "patchwork", p17: "origami",
+    p18: "carving", p19: "crochet", p20: "freeEmbroidery", p21: "reworking", p22: "polymerClay", p23: "watercolor", p24: "papercut", p25: "patchwork",
+    p26: "sewing", p27: "knitting", p28: "mosaic",
+    pr1: "sgraffito", pr2: "glazing", pr3: "wheel", pr4: "wheel", pr5: "wheel", pr6: "dyeing", pr7: "crochet", pr8: "sewing", pr9: "metalsmithing",
+    pr10: "metalsmithing", pr11: "oil", pr12: "carving", pr13: "turning", pr14: "freeEmbroidery", pr15: "reworking", pr16: "bookbinding",
+    t1: "handbuilding", t2: "glazing", t3: "knitting", t4: "patchwork", t5: "beading", t6: "watercolor", t7: "turning", t8: "freeEmbroidery", t9: "origami",
   };
 
   const users: User[] = [
@@ -282,7 +294,7 @@ export function buildSeed(now = Date.now()) {
     lang: string,
     views: number,
     extra: Partial<Post> = {},
-  ): Post => ({ id, authorId, kind, category, images: [`/img/${image}.jpg`], title, body, createdAt: ago(d, (hashStr(id) % 20) + 1), lang, views, ...extra });
+  ): Post => ({ id, authorId, kind, category, images: [`/img/${image}.jpg`], title, body, createdAt: ago(d, (hashStr(id) % 20) + 1), lang, views, technique: TECH[id], ...extra });
 
   const posts: Post[] = [
     P("p1", "u_marina", "finished", "ceramics", "post-ceramic-plate", "Тарелка «Отлив»", "Глазурь легла так, будто на тарелке застыла вода во время отлива. Три слоя: белая основа, кобальт и капля медной зелени по краю. Восстановительный обжиг, 1280°.", 1, "ru", 2140, {
@@ -393,9 +405,19 @@ export function buildSeed(now = Date.now()) {
   F("u_dasha", "u_anya", 14);
   F("u_olga", "u_anya", 10);
 
-  const PR = (p: Omit<Product, "images" | "createdAt"> & { images: string[]; d: number }): Product => {
+  const PR = (
+    p: Omit<Product, "images" | "createdAt" | "status" | "saleType"> & Partial<Pick<Product, "status" | "saleType">> & { images: string[]; d: number },
+  ): Product => {
     const { d, images, ...rest } = p;
-    return { ...rest, images: images.map((i) => `/img/${i}.jpg`), createdAt: ago(d) };
+    return {
+      status: "published",
+      saleType: rest.availability === "made_to_order" ? "to_order" : "ready",
+      technique: TECH[rest.id],
+      ...rest,
+      images: images.map((i) => `/img/${i}.jpg`),
+      createdAt: ago(d),
+      updatedAt: ago(d),
+    };
   };
 
   const products: Product[] = [
@@ -527,11 +549,20 @@ export function buildSeed(now = Date.now()) {
       materials: ["cotton paper", "linen thread", "bookboard"], dimensions: "A5, 2 cm thick",
       availability: "in_stock", stock: 7, shipsFrom: "GB", shipsTo: ["GB", "BR", "RU", "ES"], images: ["prod-coptic-notebook", "gal-notebook-bow"], lang: "en", views: 580, d: 22,
     }),
+    PR({
+      id: "pr17", sellerId: "u_marina", title: "Кружка «Северное море»", price: { amount: 2200, currency: "RUB" }, category: "ceramics", status: "draft", saleType: "personalized",
+      summary: "Черновик: кружка из серии «Северное море», можно добавить инициалы на дно.",
+      description: "Тёмная шамотная масса, селадон снаружи, белый ангоб внутри. Объём около 300 мл.",
+      story: "", materials: ["шамотная масса", "селадон"], dimensions: "Высота 9 см, 300 мл",
+      specs: [{ label: "Объём", value: "300 мл" }, { label: "Посудомоечная машина", value: "можно" }],
+      availability: "made_to_order", stock: 0, makeDays: 21, shipsFrom: "RU", shipsTo: ["RU"], images: ["gal-wood-cups"], lang: "ru", views: 0, d: 1,
+      shipping: { mode: "fixed", cost: 450, terms: "Отправляю СДЭК или Почтой России в двойной коробке." },
+    }),
   ];
 
   const T = (t: Omit<Tutorial, "cover" | "createdAt"> & { cover: string; d: number }): Tutorial => {
     const { d, cover, ...rest } = t;
-    return { ...rest, cover: `/img/${cover}.jpg`, createdAt: ago(d) };
+    return { technique: TECH[rest.id], format: "steps", ...rest, cover: `/img/${cover}.jpg`, createdAt: ago(d) };
   };
   const tutorials: Tutorial[] = [
     T({
@@ -646,7 +677,18 @@ export function buildSeed(now = Date.now()) {
     }),
   ];
 
-  const W = (w: Omit<Workshop, "cover"> & { cover: string }): Workshop => ({ ...w, cover: `/img/${w.cover}.jpg` });
+  const W = (
+    w: Omit<Workshop, "cover" | "kind" | "status" | "endsAt" | "createdAt" | "updatedAt"> & Partial<Pick<Workshop, "kind" | "status" | "endsAt">> & { cover: string },
+  ): Workshop => ({
+    kind: "workshop",
+    status: "published",
+    endsAt: new Date(new Date(w.startsAt).getTime() + w.durationMin * 60000).toISOString(),
+    level: "any",
+    createdAt: ago(20),
+    updatedAt: ago(20),
+    ...w,
+    cover: w.cover.startsWith("/") ? w.cover : `/img/${w.cover}.jpg`,
+  });
   const workshops: Workshop[] = [
     W({
       id: "w1", hostId: "u_marina", title: "Лепка без круга: чаша и тарелка", cover: "ws-handbuilding", category: "ceramics",
@@ -689,6 +731,21 @@ export function buildSeed(now = Date.now()) {
       price: null, seatsTotal: 15, seatsTaken: 9, lang: "pt-BR",
       description: "Encontro livre para tricotar juntos. Traga seu projeto — ou venha aprender o primeiro ponto.",
       program: ["Café e apresentações", "Tira-dúvidas", "Tricô livre"],
+      kind: "event",
+    }),
+    W({
+      id: "w7", hostId: "u_marina", title: "Глазури для начинающих: тестовые плитки", cover: "tut-glaze-bowls", category: "ceramics",
+      startsAt: ahead(-18, 9), durationMin: 150, timeZone: "Europe/Moscow", format: "offline", country: "RU", city: "Санкт-Петербург", venue: "Мастерская «Глина», наб. Обводного канала, 74",
+      price: { amount: 2500, currency: "RUB" }, seatsTotal: 8, seatsTaken: 8, lang: "ru", level: "beginner",
+      description: "Делали тестовые плитки и разбирались, как глазурь ведёт себя на разных массах.",
+      program: ["Типы глазурей", "Нанесение окунанием и кистью", "Подписываем плитки для обжига"],
+    }),
+    W({
+      id: "w8", hostId: "u_marina", title: "Ярмарка мастерской «Глина»", cover: "gal-wheel-studio", category: "ceramics", kind: "event", status: "draft",
+      startsAt: ahead(20, 8), durationMin: 300, timeZone: "Europe/Moscow", format: "offline", country: "RU", city: "Санкт-Петербург", venue: "Мастерская «Глина», наб. Обводного канала, 74",
+      price: null, seatsTotal: 60, seatsTaken: 0, lang: "ru",
+      description: "Черновик: весенняя распродажа посуды второго сорта и открытые столы для лепки.",
+      program: ["Распродажа", "Открытый стол для лепки", "Чай из наших пиал"],
     }),
   ];
 
@@ -804,6 +861,8 @@ export function buildSeed(now = Date.now()) {
     { userId: "u_anya", type: "tutorial", id: "t1", at: ago(10) },
     { userId: "u_anya", type: "tutorial", id: "t8", at: ago(4) },
     { userId: "u_anya", type: "workshop", id: "w5", at: ago(3) },
+    { userId: "u_anya", type: "workshop", id: "w1", at: ago(2) },
+    { userId: "u_olga", type: "workshop", id: "w1", at: ago(9) },
     { userId: "u_anya", type: "product", id: "pr14", at: ago(2) },
     { userId: "u_lucas", type: "product", id: "pr1", at: ago(6) },
     { userId: "u_lucas", type: "product", id: "pr9", at: ago(4) },
@@ -851,11 +910,37 @@ export function buildSeed(now = Date.now()) {
   ];
 
   const ideas: SavedIdea[] = [
-    { id: "i1", userId: "u_marina", title: "Серия «Северное море»", text: "Чашки с глазурью цвета пасмурной воды, ручки как обкатанные камни.", tags: ["керамика", "коллекция"], isProject: true, createdAt: ago(12) },
+    { id: "i1", userId: "u_marina", title: "Серия «Северное море»", text: "Чашки с глазурью цвета пасмурной воды, ручки как обкатанные камни.", tags: ["керамика", "коллекция"], isProject: true, projectId: "prj1", createdAt: ago(12) },
     { id: "i2", userId: "u_anya", title: "Шапка из первой пряжи", text: "Крупная вязка резинкой 2×2 на спицах 8 мм — неровность пряжи станет фактурой.", tags: ["вязание"], isProject: false, createdAt: ago(2) },
   ];
 
   const conversations: AIConversation[] = [];
+
+  const projects: Project[] = [
+    {
+      id: "prj1", userId: "u_marina", title: "Серия «Северное море»", status: "in_progress", category: "ceramics", technique: "wheel",
+      description: "Небольшая серия чашек: глазурь цвета пасмурной воды, ручки как обкатанные камни.",
+      idea: "Чашки с глазурью цвета пасмурной воды, ручки как обкатанные камни.",
+      cover: "/img/gal-wood-cups.jpg",
+      recommendations: [{ id: "r1", text: "Сделать тест-плитки трёх оттенков селадона на тёмной массе, прежде чем глазуровать всю серию.", at: ago(11) }],
+      materials: ["тёмная шамотная масса", "селадон", "белый ангоб"], tools: ["гончарный круг", "петли для обточки"],
+      plan: [
+        { id: "pl1", text: "Тест-плитки глазурей", at: ago(12) },
+        { id: "pl2", text: "Выточить 8 чашек", at: ago(12) },
+        { id: "pl3", text: "Ручки из пласта", at: ago(12) },
+        { id: "pl4", text: "Утильный и глазурный обжиг", at: ago(12) },
+      ],
+      checklist: [
+        { id: "c1", text: "Тест-плитки глазурей", done: true, at: ago(12) },
+        { id: "c2", text: "Выточить 8 чашек", done: true, at: ago(12) },
+        { id: "c3", text: "Ручки из пласта", done: false, at: ago(12) },
+        { id: "c4", text: "Утильный и глазурный обжиг", done: false, at: ago(12) },
+      ],
+      notes: [{ id: "n1", text: "Второй оттенок селадона на тёмной массе почти чёрный — брать светлую массу для внутренней стороны.", at: ago(6) }],
+      photos: [{ id: "ph1", src: "/img/gal-wheel-studio.jpg", at: ago(8), final: false }],
+      createdAt: ago(12), updatedAt: ago(6),
+    },
+  ];
 
   const productReviews: (Review & { productId: string })[] = [
     { productId: "pr1", authorId: "u_olga", rating: 5, text: "Чаша ещё красивее, чем на фото. Упаковано идеально.", at: ago(20) },
@@ -891,6 +976,7 @@ export function buildSeed(now = Date.now()) {
     messages,
     ideas,
     conversations,
+    projects,
     productReviews,
     categoryViews,
   };

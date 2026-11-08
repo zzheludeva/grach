@@ -17,8 +17,9 @@ export const isFollowing = (d: SeedData, me: string | null, id: string) => !!me 
 export const followersOf = (d: SeedData, id: string) => d.follows.filter((f) => f.followingId === id);
 export const followingOf = (d: SeedData, id: string) => d.follows.filter((f) => f.followerId === id);
 export const postsOf = (d: SeedData, id: string) => d.posts.filter((p) => p.authorId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-export const productsOf = (d: SeedData, id: string) => d.products.filter((p) => p.sellerId === id);
-export const workshopsOf = (d: SeedData, id: string) => d.workshops.filter((w) => w.hostId === id);
+/** Public listings: drafts/hidden products and draft events are never shown on profiles. */
+export const productsOf = (d: SeedData, id: string) => d.products.filter((p) => p.sellerId === id && p.status === "published");
+export const workshopsOf = (d: SeedData, id: string) => d.workshops.filter((w) => w.hostId === id && w.status !== "draft");
 export const tutorialsOf = (d: SeedData, id: string) => d.tutorials.filter((t) => t.authorId === id);
 
 export function cartOf(d: SeedData, me: string | null): CartItem[] {

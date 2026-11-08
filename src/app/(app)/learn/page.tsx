@@ -40,7 +40,7 @@ export default function Learn() {
   const workshops = useMemo(
     () =>
       d.workshops
-        .filter((w) => new Date(w.startsAt).getTime() > Date.now() - 3600_000)
+        .filter((w) => w.status === "published" && new Date(w.startsAt).getTime() > Date.now() - 3600_000)
         .filter((w) => (!category || w.category === category) && (!price || (price === "free" ? !w.price : !!w.price)) && (!format || w.format === format))
         // City relevance: online events are always shown; offline ones only in the chosen city (unless widened).
         .filter((w) => w.format === "online" || !cityOnly || w.city === settings.city)
@@ -50,7 +50,7 @@ export default function Learn() {
   const myWorkshops = d.enrollments.filter((e) => e.userId === meId).map((e) => d.workshops.find((w) => w.id === e.workshopId)!).filter(Boolean);
   const myTutorials = d.tutorialPurchases.filter((p) => p.userId === meId).map((p) => d.tutorials.find((x) => x.id === p.tutorialId)!).filter(Boolean);
   const enrolledIds = new Set(myWorkshops.map((w) => w.id));
-  const offlineElsewhere = d.workshops.filter((w) => w.format === "offline" && w.city !== settings.city).length;
+  const offlineElsewhere = d.workshops.filter((w) => w.status === "published" && w.format === "offline" && w.city !== settings.city).length;
 
   const reset = () => {
     setCategory("");
