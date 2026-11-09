@@ -32,9 +32,9 @@ export default function Favorites() {
     const ids = mine.filter((f) => f.type === tab).map((f) => f.id);
     const match = (title: string, c?: CategoryId, extra = "") => (!q || norm(`${title} ${extra}`).includes(norm(q))) && (!category || c === category);
     if (tab === "post") return d.posts.filter((p) => ids.includes(p.id) && match(p.title, p.category, p.body)).sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
-    if (tab === "tutorial") return d.tutorials.filter((x) => ids.includes(x.id) && match(x.title, x.category, x.summary));
+    if (tab === "tutorial") return d.tutorials.filter((x) => ids.includes(x.id) && (x.status === "published" || x.authorId === meId) && match(x.title, x.category, x.summary));
     if (tab === "product") return d.products.filter((x) => ids.includes(x.id) && (x.status === "published" || x.sellerId === meId) && match(x.title, x.category, x.summary));
-    return d.workshops.filter((x) => ids.includes(x.id) && (x.status !== "draft" || x.hostId === meId) && match(x.title, x.category, x.description));
+    return d.workshops.filter((x) => ids.includes(x.id) && (x.status === "published" || x.hostId === meId) && match(x.title, x.category, x.description));
   }, [d, mine, tab, q, category]);
 
   return (

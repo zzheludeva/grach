@@ -8,24 +8,22 @@ const ru: Dict = {
     all: "Все", any: "Любой", saving: "Сохранение…", errorGeneric: "Что-то пошло не так. Попробуйте ещё раз.", forbidden: "Недостаточно прав для этого действия.",
     notSet: "Не заполнено", moveUp: "Выше", moveDown: "Ниже", create: "Создать",
   },
-  nav: { overview: "Обзор", myProducts: "Мои товары", myEvents: "Мои мероприятия", myProjects: "Мои проекты", sections: "Разделы", account: "Личное" },
+  nav: { overview: "Обзор", myProducts: "Мои товары", myProjects: "Мои проекты", sections: "Разделы", account: "Личное" },
   dashboard: { step2: "Добавьте товар", step2Text: "Опубликуйте изделие в маркетплейсе", step3: "Проведите мастер-класс", step3Text: "Создайте мастер-класс или мероприятие" },
   storage: { full: "Не удалось сохранить изменения: в браузере закончилось место для демо-данных. Удалите лишние фотографии или сбросьте демо-данные в настройках." },
   notifications: {
     k: {
-      eventChanged: "Изменения в мероприятии «{title}»",
-      eventCancelled: "Мероприятие «{title}» отменено организатором",
+      eventChanged: "Изменения в мастер-классе «{title}»", eventCancelled: "Занятие «{title}» отменено организатором",
     },
-    openEvent: "Открыть мероприятие", markRead: "Отметить прочитанным",
+    openEvent: "Открыть мастер-класс", markRead: "Отметить прочитанным",
   },
   ev: {
-    kind: { workshop: "Мастер-класс", event: "Мероприятие" },
     phase: { draft: "Черновик", published: "Опубликовано", completed: "Завершено", cancelled: "Отменено" },
     field: {
       startsAt: "Начало", endsAt: "Окончание", timeZone: "Часовой пояс", format: "Формат", place: "Место проведения", onlineUrl: "Ссылка на подключение",
       price: "Стоимость", program: "Программа", terms: "Условия участия",
     },
-    change: { linkUpdated: "ссылка обновлена — она на странице мероприятия", from: "Было", to: "Стало", empty: "не указано" },
+    change: { linkUpdated: "ссылка обновлена — она на странице мастер-класса", from: "Было", to: "Стало", empty: "не указано" },
     form: {
       newTitle: "Новый мастер-класс или мероприятие", editTitle: "Редактирование", subtitle: "Черновик видите только вы. После публикации событие появится в разделе «Обучение».",
       basics: "Основное", when: "Дата и время", where: "Место или подключение", participation: "Участие",
@@ -159,7 +157,7 @@ const ru: Dict = {
     starter: { free: "Свой запрос" },
   },
   sx: {
-    type: { all: "Всё", post: "Публикации", user: "Люди", product: "Товары", workshop: "Мастер-классы", event: "Мероприятия", tutorial: "Обучение", project: "Мои проекты" },
+    type: { all: "Всё", post: "Публикации", user: "Люди", product: "Товары", workshop: "Мастер-классы", tutorial: "Обучение", project: "Мои проекты" },
     filters: "Фильтры", show: { one: "Показать {count} результат", few: "Показать {count} результата", many: "Показать {count} результатов", other: "Показать {count} результата" },
     found: { one: "Найден {count} результат", few: "Найдено {count} результата", many: "Найдено {count} результатов", other: "Найдено {count} результата" },
     resetAll: "Сбросить фильтры", remove: "Убрать фильтр: {label}", activeFilters: "Активные фильтры",
@@ -169,8 +167,7 @@ const ru: Dict = {
       shipsFrom: "Страна отправления", shipsToMe: "Доставка в {country}", inStock: "В наличии", madeToOrder: "Под заказ или персонализация", format: "Формат",
       city: "Город", when: "Дата проведения", cost: "Стоимость", seats: "Есть свободные места", level: "Уровень сложности", learnFormat: "Формат",
       availability: "Наличие и доставка", seatsGroup: "Места",
-      postKind: "Тематика", author: "Автор", projectStatus: "Статус проекта", eventKind: "Тип",
-    },
+      postKind: "Тематика", author: "Автор", projectStatus: "Статус проекта", },
     date: { any: "За всё время", d7: "За неделю", d30: "За месяц", y1: "За год" },
     when: { any: "Любая", week: "Ближайшие 7 дней", month: "Ближайшие 30 дней", past: "Прошедшие" },
     cost: { any: "Любая", free: "Бесплатно", paid: "Платно" },

@@ -17,7 +17,7 @@ import { followersOf } from "@/lib/selectors";
 
 export default function FeedPage() {
   const { state, me, meId, actions } = useStore();
-  const { t, cat, num } = useI18n();
+  const { t, cat, num, date } = useI18n();
   const { openComposer } = useShell();
   const d = state!.data;
   const [mode, setMode] = useState<FeedMode>("foryou");
@@ -176,16 +176,18 @@ export default function FeedPage() {
         <Card className="p-4">
           <p className="text-sm font-bold text-ink">{t("feed.upcoming")}</p>
           <div className="mt-3 space-y-3">
-            {d.workshops
-              .filter((w) => w.status === "published" && new Date(w.startsAt).getTime() > Date.now())
+            {d.sessions
+              .filter((s) => s.status === "scheduled" && new Date(s.startsAt).getTime() > Date.now() && d.workshops.some((w) => w.id === s.workshopId && w.status === "published"))
               .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+              .filter((s, i, arr) => arr.findIndex((x) => x.workshopId === s.workshopId) === i)
               .slice(0, 3)
-              .map((w) => (
-                <Link key={w.id} href={`/learn/workshop/${w.id}`} className="flex gap-3 rounded-xl hover:bg-ink-soft/50">
+              .map((s) => ({ s, w: d.workshops.find((w) => w.id === s.workshopId)! }))
+              .map(({ s, w }) => (
+                <Link key={s.id} href={`/learn/workshop/${w.id}?session=${s.id}`} className="flex gap-3 rounded-xl hover:bg-ink-soft/50">
                   <Image src={w.cover} alt="" width={56} height={56} className="size-14 shrink-0 rounded-lg object-cover" />
                   <span className="min-w-0 py-0.5">
                     <span className="line-clamp-2 text-[13px] font-bold leading-snug text-ink">{w.title}</span>
-                    <span className="block text-xs text-muted">{t(`workshop.${w.format}`)}{w.city ? ` · ${w.city}` : ""}</span>
+                    <span className="block text-xs text-muted">{date(s.startsAt, "medium")} · {t(`workshop.${w.format}`)}{s.city ? ` · ${s.city}` : ""}</span>
                   </span>
                 </Link>
               ))}

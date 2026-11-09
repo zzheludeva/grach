@@ -37,6 +37,28 @@ export default function SettingsPage() {
           />
           <DemoNote className="mt-5">{t("settings.independentNote")}</DemoNote>
         </Card>
+        <Card className="p-5 sm:p-6 xl:col-span-2">
+          <SectionTitle>{t("rem.title")}</SectionTitle>
+          <p className="mb-3 text-sm text-muted">{t("rem.text")}</p>
+          {(["remind24h", "remind1h"] as const).map((k) => {
+            const prefs = settings.notify ?? { remind24h: true, remind1h: true };
+            return (
+              <label key={k} className="flex cursor-pointer items-center gap-3 py-1.5 text-sm font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  checked={prefs[k]}
+                  onChange={(e) => {
+                    actions.updateSettings({ notify: { ...prefs, [k]: e.target.checked } });
+                    toast({ text: t("settings.saved") });
+                  }}
+                  className="size-4 accent-[var(--color-ink)]"
+                />
+                {t(`rem.${k}`)}
+              </label>
+            );
+          })}
+          <p className="mt-2 text-xs text-faint">{t("rem.note")}</p>
+        </Card>
         <Card className="h-fit p-5">
           <SectionTitle>{t("settings.preview")}</SectionTitle>
           <dl className="space-y-3 text-sm">

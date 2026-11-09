@@ -7,24 +7,22 @@ const en: Dict = {
     all: "All", any: "Any", saving: "Saving…", errorGeneric: "Something went wrong. Please try again.", forbidden: "You don't have permission to do this.",
     notSet: "Not filled in", moveUp: "Move up", moveDown: "Move down", create: "Create",
   },
-  nav: { overview: "Overview", myProducts: "My products", myEvents: "My events", myProjects: "My projects", sections: "Sections", account: "Personal" },
+  nav: { overview: "Overview", myProducts: "My products", myProjects: "My projects", sections: "Sections", account: "Personal" },
   dashboard: { step2: "Add a product", step2Text: "Publish an item on the marketplace", step3: "Host a workshop", step3Text: "Create a workshop or an event" },
   storage: { full: "Changes could not be saved: the browser ran out of space for demo data. Remove some photos or reset the demo data in Settings." },
   notifications: {
     k: {
-      eventChanged: "Changes to the event “{title}”",
-      eventCancelled: "The event “{title}” was cancelled by the host",
+      eventChanged: "Changes to the workshop “{title}”", eventCancelled: "The session of “{title}” was cancelled by the host",
     },
-    openEvent: "Open event", markRead: "Mark as read",
+    openEvent: "Open workshop", markRead: "Mark as read",
   },
   ev: {
-    kind: { workshop: "Workshop", event: "Event" },
     phase: { draft: "Draft", published: "Published", completed: "Completed", cancelled: "Cancelled" },
     field: {
       startsAt: "Start", endsAt: "End", timeZone: "Time zone", format: "Format", place: "Venue", onlineUrl: "Joining link",
       price: "Price", program: "Programme", terms: "Terms of participation",
     },
-    change: { linkUpdated: "link updated — see the event page", from: "Was", to: "Now", empty: "not set" },
+    change: { linkUpdated: "link updated — see the workshop page", from: "Was", to: "Now", empty: "not set" },
     form: {
       newTitle: "New workshop or event", editTitle: "Editing", subtitle: "Only you can see a draft. Once published, it appears in Learning.",
       basics: "Basics", when: "Date and time", where: "Venue or link", participation: "Participation",
@@ -156,7 +154,7 @@ const en: Dict = {
     starter: { free: "Your own request" },
   },
   sx: {
-    type: { all: "All", post: "Posts", user: "People", product: "Products", workshop: "Workshops", event: "Events", tutorial: "Learning", project: "My projects" },
+    type: { all: "All", post: "Posts", user: "People", product: "Products", workshop: "Workshops", tutorial: "Learning", project: "My projects" },
     filters: "Filters", show: { one: "Show {count} result", other: "Show {count} results" },
     found: { one: "{count} result found", other: "{count} results found" },
     resetAll: "Reset filters", remove: "Remove filter: {label}", activeFilters: "Active filters",
@@ -166,8 +164,7 @@ const en: Dict = {
       shipsFrom: "Ships from", shipsToMe: "Ships to {country}", inStock: "In stock", madeToOrder: "Made to order or personalised", format: "Format",
       city: "City", when: "Event date", cost: "Price", seats: "Seats available", level: "Difficulty", learnFormat: "Format",
       availability: "Availability and delivery", seatsGroup: "Seats",
-      postKind: "Topic", author: "Author", projectStatus: "Project status", eventKind: "Type",
-    },
+      postKind: "Topic", author: "Author", projectStatus: "Project status", },
     date: { any: "Any time", d7: "Past week", d30: "Past month", y1: "Past year" },
     when: { any: "Any", week: "Next 7 days", month: "Next 30 days", past: "Past" },
     cost: { any: "Any", free: "Free", paid: "Paid" },

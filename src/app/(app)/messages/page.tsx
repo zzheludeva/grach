@@ -29,7 +29,7 @@ export default function Messages() {
               <Avatar name={user.name} color={user.avatarColor} size={44} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-bold text-ink">{user.name}</p>
-                <p className="truncate text-sm text-muted">{last.text}</p>
+                <p className="truncate text-sm text-muted">{last.text || (last.image ? t("ord.photoShort") : "")}</p>
               </div>
               <span className="shrink-0 text-xs text-faint">{relative(last.at)}</span>
             </Link>

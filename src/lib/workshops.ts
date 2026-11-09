@@ -1,66 +1,78 @@
 import type { SeedData } from "@/data/seed";
-import type { Money, Workshop, WorkshopPhase } from "./types";
+import type { Enrollment, Money, SessionPhase, Workshop, WorkshopSession } from "./types";
 
-/** Lifecycle as people see it: a published event whose end time has passed is "completed". */
-export function workshopPhase(w: Workshop, now = Date.now()): WorkshopPhase {
-  if (w.status !== "published") return w.status;
-  return new Date(w.endsAt).getTime() < now ? "completed" : "published";
+/* ============================================================
+ * Workshops = template (permanent info) + sessions (concrete runs).
+ * Bookings belong to a session. There is no separate "event" entity.
+ * ============================================================ */
+
+export function sessionPhase(s: WorkshopSession, now = Date.now()): SessionPhase {
+  if (s.status === "cancelled") return "cancelled";
+  return new Date(s.endsAt).getTime() < now ? "completed" : "upcoming";
 }
 
-/** Events listed publicly: published (incl. completed) and cancelled ones; never drafts. */
-export function isPublicWorkshop(w: Workshop) {
-  return w.status === "published" || w.status === "cancelled";
+export const sessionsOf = (d: SeedData, workshopId: string) =>
+  d.sessions.filter((s) => s.workshopId === workshopId).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+
+export const bookingsOf = (d: SeedData, sessionId: string) => d.enrollments.filter((e) => e.sessionId === sessionId);
+
+export function seatsTaken(d: SeedData, s: WorkshopSession) {
+  return (s.externalSeats ?? 0) + bookingsOf(d, s.id).reduce((n, e) => n + e.seats, 0);
+}
+export const seatsLeft = (d: SeedData, s: WorkshopSession) => Math.max(0, s.seatsTotal - seatsTaken(d, s));
+
+/** Bookable: template published, session scheduled, in the future and with free seats. */
+export function isBookable(d: SeedData, s: WorkshopSession, now = Date.now()) {
+  const w = d.workshops.find((x) => x.id === s.workshopId);
+  return !!w && w.status === "published" && s.status === "scheduled" && new Date(s.startsAt).getTime() > now && seatsLeft(d, s) > 0;
 }
 
-/** Upcoming and bookable. */
-export function isBookable(w: Workshop, now = Date.now()) {
-  return w.status === "published" && new Date(w.startsAt).getTime() > now;
+/** Upcoming scheduled sessions of a published template, soonest first. */
+export function upcomingSessions(d: SeedData, workshopId: string, now = Date.now()) {
+  return sessionsOf(d, workshopId).filter((s) => s.status === "scheduled" && new Date(s.startsAt).getTime() > now);
 }
+export const nextSession = (d: SeedData, workshopId: string, now = Date.now()) => upcomingSessions(d, workshopId, now)[0];
 
-/**
- * Fields whose change matters to participants. Editing anything else
- * (title typo, description wording, cover, seats) does NOT notify anyone.
- */
-export const SIGNIFICANT_FIELDS = ["startsAt", "endsAt", "timeZone", "format", "place", "onlineUrl", "price", "program", "terms"] as const;
+/** Templates people can discover: published only. */
+export const isPublicWorkshop = (w: Workshop) => w.status === "published";
+
+/* ---------- significant changes of a session (notify its participants) ---------- */
+
+export const SIGNIFICANT_FIELDS = ["startsAt", "endsAt", "timeZone", "format", "place", "onlineUrl", "price", "terms"] as const;
 export type SignificantField = (typeof SIGNIFICANT_FIELDS)[number];
 
 const moneyRaw = (m: Money | null) => (m ? `${m.amount}|${m.currency}` : "");
-const placeRaw = (w: Pick<Workshop, "country" | "city" | "venue">) => [w.country, w.city ?? "", w.venue ?? ""].join("|");
 const norm = (s?: string) => (s ?? "").trim().replace(/\s+/g, " ");
 
-/** Raw (locale-neutral) values; they are formatted for each reader when the notification is shown. */
-export function rawValue(w: Workshop, field: SignificantField): string {
+export function rawValue(s: WorkshopSession, field: SignificantField): string {
   switch (field) {
     case "startsAt":
-      return w.startsAt;
+      return s.startsAt;
     case "endsAt":
-      return w.endsAt;
+      return s.endsAt;
     case "timeZone":
-      return w.timeZone;
+      return s.timeZone;
     case "format":
-      return w.format;
+      return s.format;
     case "place":
-      return w.format === "offline" ? placeRaw(w) : "";
+      return s.format === "offline" ? [s.country, s.city ?? "", s.venue ?? ""].join("|") : "";
     case "onlineUrl":
-      return w.format === "online" ? norm(w.onlineUrl) : "";
+      return s.format === "online" ? norm(s.onlineUrl) : "";
     case "price":
-      return moneyRaw(w.price);
-    case "program":
-      return w.program.map(norm).filter(Boolean).join("\n");
+      return moneyRaw(s.price);
     case "terms":
-      return norm(w.terms);
+      return norm(s.terms);
   }
 }
 
-export interface WorkshopChange {
+export interface SessionChange {
   field: SignificantField;
   from: string;
   to: string;
 }
 
-/** Significant differences between the stored (published) version and the edited one. */
-export function significantChanges(before: Workshop, after: Workshop): WorkshopChange[] {
-  const out: WorkshopChange[] = [];
+export function significantChanges(before: WorkshopSession, after: WorkshopSession): SessionChange[] {
+  const out: SessionChange[] = [];
   for (const f of SIGNIFICANT_FIELDS) {
     const a = rawValue(before, f);
     const b = rawValue(after, f);
@@ -71,25 +83,147 @@ export function significantChanges(before: Workshop, after: Workshop): WorkshopC
   return out;
 }
 
-/**
- * People to notify about an event: enrolled participants + those who saved it.
- * A person who is both gets exactly one notification. The host is never notified.
- */
-export function eventAudience(d: SeedData, w: Workshop): string[] {
-  const ids = new Set<string>();
-  d.enrollments.filter((e) => e.workshopId === w.id).forEach((e) => ids.add(e.userId));
-  d.favorites.filter((f) => f.type === "workshop" && f.id === w.id).forEach((f) => ids.add(f.userId));
-  ids.delete(w.hostId);
-  return [...ids];
+/** Participants of a session (one entry per person even if they booked several seats). Never the host. */
+export function sessionAudience(d: SeedData, s: WorkshopSession): string[] {
+  return [...new Set(bookingsOf(d, s.id).map((e) => e.userId))].filter((u) => u !== s.hostId);
 }
 
-export function durationMin(w: Pick<Workshop, "startsAt" | "endsAt">) {
-  return Math.max(0, Math.round((new Date(w.endsAt).getTime() - new Date(w.startsAt).getTime()) / 60000));
+/**
+ * How template edits reach sessions. Already published sessions keep their own copy
+ * of price, terms and venue; the host chooses explicitly:
+ *  - "new": only sessions created from now on;
+ *  - "empty": also future sessions nobody has booked yet;
+ *  - "all": every future session (booked participants are notified of the change).
+ */
+export type ApplyMode = "new" | "empty" | "all";
+
+export function templateDiffForSessions(before: Workshop, after: Workshop) {
+  return {
+    price: moneyRaw(before.price) !== moneyRaw(after.price),
+    terms: norm(before.terms) !== norm(after.terms),
+    place: [before.country, before.city, before.venue].map(norm).join("|") !== [after.country, after.city, after.venue].map(norm).join("|"),
+  };
+}
+
+export function applyTemplateToSession(s: WorkshopSession, w: Workshop, diff: ReturnType<typeof templateDiffForSessions>): WorkshopSession {
+  return {
+    ...s,
+    price: diff.price ? w.price : s.price,
+    terms: diff.terms ? w.terms : s.terms,
+    ...(diff.place && s.format === "offline" ? { country: w.country, city: w.city, venue: w.venue } : {}),
+  };
+}
+
+/* ---------- organizer reminders ---------- */
+
+export type ReminderKind = "24h" | "1h";
+const HOUR = 3_600_000;
+
+/**
+ * Which reminder is due for a session right now. Each window is sent at most once
+ * (dedupe by `${sessionId}:${kind}`), only for scheduled sessions of published templates.
+ * A window that was missed entirely (e.g. session created 30 min before start) is skipped.
+ */
+export function dueReminder(s: WorkshopSession, now: number, prefs: { remind24h: boolean; remind1h: boolean }, sent: Set<string>): ReminderKind | null {
+  if (s.status !== "scheduled") return null;
+  const start = new Date(s.startsAt).getTime();
+  if (now >= start) return null;
+  if (prefs.remind1h && now >= start - HOUR && !sent.has(`${s.id}:1h`)) return "1h";
+  if (prefs.remind24h && now >= start - 24 * HOUR && now < start - HOUR && !sent.has(`${s.id}:24h`)) return "24h";
+  return null;
+}
+
+/* ---------- legacy (one record = one date) → template + session ---------- */
+
+export interface LegacyWorkshop {
+  id: string;
+  hostId: string;
+  title: string;
+  cover: string;
+  category: Workshop["category"];
+  startsAt: string;
+  durationMin: number;
+  timeZone: string;
+  format: "online" | "offline";
+  country: string;
+  city?: string;
+  venue?: string;
+  onlineUrl?: string;
+  price: Money | null;
+  seatsTotal: number;
+  seatsTaken: number;
+  description: string;
+  program: string[];
+  lang: string;
+  kind?: string;
+  status?: string;
+  endsAt?: string;
+  level?: Workshop["level"];
+  materials?: string[];
+  terms?: string;
+  technique?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  cancelledAt?: string;
+}
+
+/** Splits an old single-date workshop (or a former "event") into a template and its one session. */
+export function splitLegacy(w: LegacyWorkshop, inAppSeats: number): { template: Workshop; session: WorkshopSession } {
+  const created = w.createdAt ?? w.startsAt;
+  const updated = w.updatedAt ?? created;
+  const template: Workshop = {
+    id: w.id,
+    hostId: w.hostId,
+    title: w.title,
+    cover: w.cover,
+    category: w.category,
+    technique: w.technique,
+    level: w.level ?? "any",
+    description: w.description,
+    program: w.program,
+    materials: w.materials ?? [],
+    format: w.format,
+    price: w.price,
+    durationMin: w.durationMin,
+    terms: w.terms,
+    country: w.country,
+    city: w.city,
+    venue: w.venue,
+    lang: w.lang,
+    status: w.status === "draft" ? "draft" : "published",
+    createdAt: created,
+    updatedAt: updated,
+  };
+  const session: WorkshopSession = {
+    id: `${w.id}_s1`,
+    workshopId: w.id,
+    hostId: w.hostId,
+    startsAt: w.startsAt,
+    endsAt: w.endsAt ?? new Date(new Date(w.startsAt).getTime() + w.durationMin * 60000).toISOString(),
+    timeZone: w.timeZone,
+    format: w.format,
+    country: w.country,
+    city: w.city,
+    venue: w.venue,
+    onlineUrl: w.onlineUrl,
+    seatsTotal: w.seatsTotal,
+    externalSeats: Math.max(0, w.seatsTaken - inAppSeats),
+    price: w.price,
+    terms: w.terms,
+    status: w.status === "cancelled" ? "cancelled" : "scheduled",
+    createdAt: created,
+    updatedAt: updated,
+    cancelledAt: w.cancelledAt,
+  };
+  return { template, session };
+}
+
+export function legacyEnrollment(e: { userId: string; workshopId: string; at: string }): Enrollment {
+  return { id: `e_${e.workshopId}_${e.userId}`, userId: e.userId, workshopId: e.workshopId, sessionId: `${e.workshopId}_s1`, seats: 1, at: e.at };
 }
 
 /* ---------- time-zone aware date inputs ---------- */
 
-/** Offset (ms) of a time zone at a given instant. */
 function tzOffset(instant: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -114,14 +248,13 @@ export function wallToIso(local: string, timeZone: string): string {
   const [h, mi] = tm.split(":").map(Number);
   const guess = Date.UTC(y, m - 1, day, h, mi);
   let ts = guess - tzOffset(new Date(guess), timeZone);
-  ts = guess - tzOffset(new Date(ts), timeZone); // second pass handles DST edges
+  ts = guess - tzOffset(new Date(ts), timeZone);
   return new Date(ts).toISOString();
 }
 
-/** ISO instant → "YYYY-MM-DDTHH:mm" wall-clock time in `timeZone` (for datetime-local inputs). */
+/** ISO instant → "YYYY-MM-DDTHH:mm" wall-clock time in `timeZone`. */
 export function isoToWall(iso: string, timeZone: string): string {
   if (!iso) return "";
   const d = new Date(iso);
-  const local = new Date(d.getTime() + tzOffset(d, timeZone));
-  return local.toISOString().slice(0, 16);
+  return new Date(d.getTime() + tzOffset(d, timeZone)).toISOString().slice(0, 16);
 }

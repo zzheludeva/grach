@@ -16,12 +16,14 @@ import type {
   TutorialPurchase,
   User,
   Workshop,
+  WorkshopSession,
   Address,
   AIConversation,
   Review,
   Project,
 } from "@/lib/types";
 import { DAY, HOUR, hashStr } from "@/lib/utils";
+import { legacyEnrollment, splitLegacy, type LegacyWorkshop } from "@/lib/workshops";
 
 /* All dates are relative to the moment the demo database is first created, so the
    demo always looks "fresh" (upcoming workshops stay upcoming). */
@@ -560,9 +562,18 @@ export function buildSeed(now = Date.now()) {
     }),
   ];
 
-  const T = (t: Omit<Tutorial, "cover" | "createdAt"> & { cover: string; d: number }): Tutorial => {
+  const T = (t: Omit<Tutorial, "cover" | "createdAt" | "status"> & Partial<Pick<Tutorial, "status">> & { cover: string; d: number }): Tutorial => {
     const { d, cover, ...rest } = t;
-    return { technique: TECH[rest.id], format: "steps", ...rest, cover: `/img/${cover}.jpg`, createdAt: ago(d) };
+    return {
+      technique: TECH[rest.id],
+      format: "steps",
+      status: "published",
+      ...rest,
+      views: rest.status === "draft" ? 0 : 300 + (hashStr(rest.id) % 1500),
+      cover: cover.startsWith("/") ? cover : `/img/${cover}.jpg`,
+      createdAt: ago(d),
+      updatedAt: ago(d),
+    };
   };
   const tutorials: Tutorial[] = [
     T({
@@ -675,21 +686,22 @@ export function buildSeed(now = Date.now()) {
       ],
       reviews: [{ authorId: "u_dasha", rating: 5, text: "Сложила с дочкой, обе счастливы.", at: ago(30) }],
     }),
+    T({
+      id: "t10", authorId: "u_marina", title: "Отводка ручки для кружки", status: "draft", cover: "gal-wood-cups", category: "ceramics", level: "intermediate", durationMin: 40,
+      summary: "Черновик: как вытянуть ручку из глины и прилепить её так, чтобы не треснула.", price: null, lang: "ru", d: 1, direction: "Посуда",
+      materials: ["пластичная глина", "шликер", "губка"], steps: [{ title: "Заготовка", text: "Скатайте морковку из глины и смочите руку." }], reviews: [],
+    }),
   ];
 
-  const W = (
-    w: Omit<Workshop, "cover" | "kind" | "status" | "endsAt" | "createdAt" | "updatedAt"> & Partial<Pick<Workshop, "kind" | "status" | "endsAt">> & { cover: string },
-  ): Workshop => ({
-    kind: "workshop",
-    status: "published",
-    endsAt: new Date(new Date(w.startsAt).getTime() + w.durationMin * 60000).toISOString(),
+  /** Seed authored in the old one-date shape, then split into templates + sessions. */
+  const W = (w: Omit<LegacyWorkshop, "cover"> & { cover: string }): LegacyWorkshop => ({
     level: "any",
     createdAt: ago(20),
     updatedAt: ago(20),
     ...w,
     cover: w.cover.startsWith("/") ? w.cover : `/img/${w.cover}.jpg`,
   });
-  const workshops: Workshop[] = [
+  const legacyWorkshops: LegacyWorkshop[] = [
     W({
       id: "w1", hostId: "u_marina", title: "Лепка без круга: чаша и тарелка", cover: "ws-handbuilding", category: "ceramics",
       startsAt: ahead(6, 9), durationMin: 180, timeZone: "Europe/Moscow", format: "offline", country: "RU", city: "Санкт-Петербург", venue: "Мастерская «Глина», наб. Обводного канала, 74",
@@ -731,7 +743,6 @@ export function buildSeed(now = Date.now()) {
       price: null, seatsTotal: 15, seatsTaken: 9, lang: "pt-BR",
       description: "Encontro livre para tricotar juntos. Traga seu projeto — ou venha aprender o primeiro ponto.",
       program: ["Café e apresentações", "Tira-dúvidas", "Tricô livre"],
-      kind: "event",
     }),
     W({
       id: "w7", hostId: "u_marina", title: "Глазури для начинающих: тестовые плитки", cover: "tut-glaze-bowls", category: "ceramics",
@@ -741,11 +752,11 @@ export function buildSeed(now = Date.now()) {
       program: ["Типы глазурей", "Нанесение окунанием и кистью", "Подписываем плитки для обжига"],
     }),
     W({
-      id: "w8", hostId: "u_marina", title: "Ярмарка мастерской «Глина»", cover: "gal-wheel-studio", category: "ceramics", kind: "event", status: "draft",
+      id: "w8", hostId: "u_marina", title: "Открытый стол: лепим пиалы", cover: "gal-wheel-studio", category: "ceramics", status: "draft",
       startsAt: ahead(20, 8), durationMin: 300, timeZone: "Europe/Moscow", format: "offline", country: "RU", city: "Санкт-Петербург", venue: "Мастерская «Глина», наб. Обводного канала, 74",
       price: null, seatsTotal: 60, seatsTaken: 0, lang: "ru",
-      description: "Черновик: весенняя распродажа посуды второго сорта и открытые столы для лепки.",
-      program: ["Распродажа", "Открытый стол для лепки", "Чай из наших пиал"],
+      description: "Черновик: свободная лепка пиал с подсказками мастера, чай из наших пиал.",
+      program: ["Показ приёмов", "Свободная лепка", "Чай и разбор работ"],
     }),
   ];
 
@@ -754,7 +765,31 @@ export function buildSeed(now = Date.now()) {
     { userId: "u_olga", workshopId: "w1", at: ago(9) },
     { userId: "u_pavel", workshopId: "w1", at: ago(7) },
     { userId: "u_lucas", workshopId: "w2", at: ago(5) },
-  ];
+  ].map(legacyEnrollment);
+  const workshops: Workshop[] = [];
+  const sessions: WorkshopSession[] = [];
+  for (const lw of legacyWorkshops) {
+    const { template, session } = splitLegacy(lw, enrollments.filter((e) => e.workshopId === lw.id).length);
+    workshops.push(template);
+    sessions.push(session);
+  }
+  // One template, several dates: extra sessions created from existing templates.
+  const extra = (base: WorkshopSession, id: string, startsAt: string, patch: Partial<WorkshopSession> = {}): WorkshopSession => ({
+    ...base,
+    id,
+    startsAt,
+    endsAt: new Date(new Date(startsAt).getTime() + (new Date(base.endsAt).getTime() - new Date(base.startsAt).getTime())).toISOString(),
+    externalSeats: 0,
+    createdAt: ago(2),
+    updatedAt: ago(2),
+    ...patch,
+  });
+  const w1s1 = sessions.find((x) => x.id === "w1_s1")!;
+  const w7s1 = sessions.find((x) => x.id === "w7_s1")!;
+  sessions.push(extra(w1s1, "w1_s2", ahead(13, 9), { externalSeats: 1 }));
+  // Starts in ~20 hours: the host gets the 24-hour reminder on the first load.
+  sessions.push(extra(w7s1, "w7_s2", new Date(Math.ceil((now + 20 * HOUR) / HOUR) * HOUR).toISOString(), { externalSeats: 3 }));
+  enrollments.push({ id: "e_w7s2_anya", userId: "u_anya", workshopId: "w7", sessionId: "w7_s2", seats: 2, at: ago(1) });
 
   // Tutorial purchases feed the author dashboard (education income).
   const tutorialPurchases: TutorialPurchase[] = [];
@@ -966,6 +1001,7 @@ export function buildSeed(now = Date.now()) {
     products,
     tutorials,
     workshops,
+    sessions,
     enrollments,
     tutorialPurchases,
     orders,
@@ -977,6 +1013,7 @@ export function buildSeed(now = Date.now()) {
     ideas,
     conversations,
     projects,
+    reminderLog: [] as string[],
     productReviews,
     categoryViews,
   };

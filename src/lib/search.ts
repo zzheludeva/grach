@@ -3,6 +3,7 @@ import type { CategoryId, CountryCode, CurrencyCode, Money, Post, Product, Proje
 import { categorySearchTerms, techniqueSearchTerms } from "@/i18n/content";
 import { likeCount } from "./selectors";
 import { norm, DAY } from "./utils";
+import { nextSession, seatsLeft, seatsTaken } from "./workshops";
 
 /**
  * Global search: one index over posts, people, products, workshops, events, tutorials
@@ -10,7 +11,7 @@ import { norm, DAY } from "./utils";
  * Every filter and sort here changes the result set; the page only renders it.
  */
 
-export const SEARCH_TYPES = ["all", "post", "user", "product", "workshop", "event", "tutorial", "project"] as const;
+export const SEARCH_TYPES = ["all", "post", "user", "product", "workshop", "tutorial", "project"] as const;
 export type SearchType = (typeof SEARCH_TYPES)[number];
 export type ItemType = Exclude<SearchType, "all">;
 
@@ -23,7 +24,6 @@ export const SORTS_BY_TYPE: Record<SearchType, SortKey[]> = {
   user: ["relevance", "newest", "oldest", "popular"],
   product: ["relevance", "newest", "oldest", "popular", "saves", "priceAsc", "priceDesc"],
   workshop: ["relevance", "eventDate", "newest", "oldest", "popular", "saves", "priceAsc", "priceDesc"],
-  event: ["relevance", "eventDate", "newest", "oldest", "popular", "saves", "priceAsc", "priceDesc"],
   tutorial: ["relevance", "newest", "oldest", "popular", "saves", "priceAsc", "priceDesc"],
   project: ["relevance", "newest", "oldest"],
 };
@@ -35,8 +35,7 @@ export const FILTERS_BY_TYPE: Record<SearchType, string[]> = {
   post: ["kind", "tech", "author"],
   user: [],
   product: ["tech", "mat", "cur", "pmin", "pmax", "from", "ship", "stock", "mto"],
-  workshop: ["fmt", "city", "when", "cost", "seats", "level"],
-  event: ["fmt", "city", "when", "cost", "seats"],
+  workshop: ["tech", "fmt", "city", "when", "cost", "seats", "level"],
   tutorial: ["tech", "level", "lfmt", "cost"],
   project: ["pst"],
 };
@@ -125,12 +124,15 @@ function index(c: Ctx, q: string): SearchItem[] {
     out.push({ type: "product", id: p.id, title: p.title, createdAt: p.createdAt, score: s, popularity: p.views, saves: favCount(d, "product", p.id), price: p.price, cat: p.category, lang: p.lang, country: p.shipsFrom, tech: p.technique, ref: p });
   }
   for (const w of d.workshops) {
-    if (w.status !== "published") continue; // drafts are private, cancelled ones are not discoverable
-    const s = score(q, w.title, `${w.description} ${w.program.join(" ")} ${w.city ?? ""} ${w.venue ?? ""} ${user(w.hostId)?.name ?? ""}`, w.category);
+    if (w.status !== "published") continue; // drafts and archived templates are not discoverable
+    const s = score(q, w.title, `${w.description} ${w.program.join(" ")} ${w.city ?? ""} ${w.venue ?? ""} ${user(w.hostId)?.name ?? ""}`, w.category, w.technique);
     if (q && !s) continue;
-    out.push({ type: w.kind === "event" ? "event" : "workshop", id: w.id, title: w.title, createdAt: w.createdAt, score: s, popularity: w.seatsTaken, saves: favCount(d, "workshop", w.id), price: w.price, eventAt: w.startsAt, cat: w.category, lang: w.lang, country: w.country, ref: w });
+    const next = nextSession(d, w.id, c.now);
+    const booked = d.sessions.filter((x) => x.workshopId === w.id).reduce((n, x) => n + seatsTaken(d, x), 0);
+    out.push({ type: "workshop", id: w.id, title: w.title, createdAt: w.createdAt, score: s, popularity: booked, saves: favCount(d, "workshop", w.id), price: next?.price ?? w.price, eventAt: next?.startsAt, cat: w.category, lang: w.lang, country: w.country, tech: w.technique, ref: w });
   }
   for (const tu of d.tutorials) {
+    if (tu.status !== "published") continue;
     const s = score(q, tu.title, `${tu.summary} ${tu.steps.map((x) => `${x.title} ${x.text}`).join(" ")} ${user(tu.authorId)?.name ?? ""}`, tu.category, tu.technique);
     if (q && !s) continue;
     const buys = d.tutorialPurchases.filter((x) => x.tutorialId === tu.id).length;
@@ -187,19 +189,28 @@ function passSpecific(it: SearchItem, f: Filters, c: Ctx) {
       if (f.mto && p.saleType === "ready") return false;
       return true;
     }
-    case "workshop":
-    case "event": {
+    case "workshop": {
+      // Date, city, price and seat filters are matched against the template's concrete sessions.
       const w = it.ref as Workshop;
-      const start = new Date(w.startsAt).getTime();
+      if (f.tech && w.technique !== f.tech) return false;
       if (f.fmt && w.format !== f.fmt) return false;
-      if (f.city && w.city !== f.city) return false;
-      if (f.when === "week" && !(start >= c.now && start <= c.now + 7 * DAY)) return false;
-      if (f.when === "month" && !(start >= c.now && start <= c.now + 30 * DAY)) return false;
-      if (f.when === "past" && start >= c.now) return false;
-      if (f.cost === "free" && w.price) return false;
-      if (f.cost === "paid" && !w.price) return false;
-      if (f.seats && (w.seatsTaken >= w.seatsTotal || start < c.now)) return false;
       if (f.level && w.level !== f.level) return false;
+      const ss = c.d.sessions.filter((s) => s.workshopId === w.id && s.status === "scheduled");
+      const ok = ss.filter((s) => {
+        const start = new Date(s.startsAt).getTime();
+        if (f.when === "past") return start < c.now;
+        if (start < c.now) return false;
+        if (f.when === "week" && start > c.now + 7 * DAY) return false;
+        if (f.when === "month" && start > c.now + 30 * DAY) return false;
+        if (f.city && s.city !== f.city) return false;
+        if (f.cost === "free" && s.price) return false;
+        if (f.cost === "paid" && !s.price) return false;
+        if (f.seats && seatsLeft(c.d, s) <= 0) return false;
+        return true;
+      });
+      const anySessionFilter = f.when || f.city || f.cost || f.seats;
+      if (anySessionFilter && !ok.length) return false;
+      if (ok.length && f.when !== "past") it.eventAt = ok[0].startsAt;
       return true;
     }
     case "tutorial": {

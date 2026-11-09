@@ -3,11 +3,12 @@ import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Check, Copy, MessageCircle, PartyPopper, RotateCcw, FastForward, Star } from "lucide-react";
+import { ArrowLeft, Check, Copy, MessageCircle, PartyPopper, RotateCcw, Star, ExternalLink, Truck, Camera } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { userById } from "@/lib/selectors";
-import { canCancel, canConfirmReceived, nextStatus, ORDER_FLOW, STATUS_TONE } from "@/lib/orders";
+import { canCancel, canConfirmReceived, pendingAck, sellerNext, STATUS_TONE } from "@/lib/orders";
+import { OrderTimeline, SellerStepModal, RejectModal, PhotoViewer } from "@/components/orders/OrderFlow";
 import { formatAddressLines } from "@/lib/regions";
 import { Avatar, Badge, Card, DemoNote, EmptyState, Textarea } from "@/components/ui/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -27,14 +28,18 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   const o = d.orders.find((x) => x.id === id);
   const [cancel, setCancel] = useState(false);
   const [review, setReview] = useState<{ productId: string; rating: number; text: string } | null>(null);
+  const [step, setStep] = useState(false);
+  const [reject, setReject] = useState(false);
+  const [viewPhoto, setViewPhoto] = useState<string | null>(null);
   if (!o || (o.buyerId !== meId && o.sellerId !== meId)) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/orders">{t("nav.orders")}</ButtonLink>} />;
   const seller = userById(d, o.sellerId)!;
   const siblings = d.orders.filter((x) => x.groupId === o.groupId && x.id !== o.id);
   const placed = sp.get("placed");
   const isBuyer = o.buyerId === meId;
-  const reached = new Map(o.history.map((h) => [h.status, h.at]));
-  const flow = o.status === "cancelled" ? [...o.history.map((h) => h.status)] : ORDER_FLOW;
-  const nxt = nextStatus(o.status);
+  const isSeller = o.sellerId === meId;
+  const buyer = userById(d, o.buyerId);
+  const nxt = isSeller ? sellerNext(o.status) : null;
+  const waiting = pendingAck(o);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -58,54 +63,47 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-6">
-          <Card className="p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-bold text-ink">{t("orders.timeline")}</h2>
-              <DemoNote className="py-1">{t("orders.demoTracking")}</DemoNote>
-            </div>
-            <ol className="relative">
-              {flow.map((s, i) => {
-                const at = reached.get(s);
-                const isCurrent = s === o.status;
-                const done = !!at && !isCurrent;
-                return (
-                  <li key={s + i} className="relative flex gap-4 pb-5 last:pb-0">
-                    {i < flow.length - 1 && <span className={cn("absolute start-[11px] top-6 h-[calc(100%-16px)] w-0.5", at && reached.get(flow[i + 1]) ? "bg-teal" : "bg-line")} />}
-                    <span
-                      className={cn(
-                        "relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2",
-                        isCurrent ? (s === "cancelled" ? "border-rose bg-rose text-white" : "border-ink bg-ink text-saffron") : done ? "border-teal bg-teal text-white" : "border-line bg-surface",
-                      )}
-                    >
-                      {done && <Check className="size-3.5" />}
-                      {isCurrent && <span className="size-2 rounded-full bg-current" />}
-                    </span>
-                    <div className="min-w-0">
-                      <p className={cn("text-sm font-semibold", at ? "text-ink" : "text-faint")}>
-                        {t(statusLabelKey(s, o.deliveryMethod))}
-                        {isCurrent && <span className="ms-2 text-xs font-bold text-rust">{t("orders.current")}</span>}
-                      </p>
-                      {at && <p className="nums text-xs text-muted">{date(at, "datetime")}</p>}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-            {nxt && o.status !== "cancelled" && (
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed border-line pt-4">
-                <Button
-                  size="sm"
-                  variant="soft"
-                  onClick={() => {
-                    actions.advanceOrder(o.id);
-                    toast({ text: t("orders.advanced", { status: t(statusLabelKey(nxt, o.deliveryMethod)) }), tone: "info" });
-                  }}
-                >
-                  <FastForward className="size-4" /> {t("orders.simulate")}
+          {isBuyer && waiting && (
+            <Card className="border-saffron/60 bg-saffron-soft/40 p-5">
+              <p className="font-bold text-ink">{t("ord.ackTitle", { status: t(`orderStatus.${waiting.status}`) })}</p>
+              <p className="mt-1 text-sm text-muted">{t("ord.ackText")}</p>
+              {waiting.photo && (
+                <button onClick={() => setViewPhoto(waiting.photo!)} className="relative mt-3 block size-28 overflow-hidden rounded-xl border border-line">
+                  <Image src={waiting.photo} alt={t("ord.readyPhoto")} fill sizes="112px" unoptimized className="object-cover" />
+                </button>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => { actions.ackOrderStep(o.id); toast({ text: t("ord.toast.acked") }); }}>
+                  <Check className="size-4" /> {t("ord.ack")}
                 </Button>
-                <span className="text-xs text-faint">{t("orders.simulateHint")}</span>
+                <Button size="sm" variant="danger" onClick={() => setReject(true)}>{t("ord.reject")}</Button>
               </div>
-            )}
+            </Card>
+          )}
+          {isSeller && (
+            <Card className="p-5">
+              <p className="text-xs font-bold uppercase text-faint">{t("ord.sellerPanel")}</p>
+              {nxt ? (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Button onClick={() => setStep(true)}>
+                    {nxt === "ready" ? <Camera className="size-4" /> : nxt === "handed_over" ? <Truck className="size-4" /> : <Check className="size-4" />} {t(`ord.action.${nxt}`)}
+                  </Button>
+                  <span className="text-sm text-muted">{t(`ord.hint.${nxt}`)}</span>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted">{o.status === "cancelled" ? t("ord.closedCancelled") : o.status === "received" ? t("ord.closedReceived") : t("ord.buyerTurn")}</p>
+              )}
+              {waiting && <p className="mt-3 text-xs font-semibold text-rust">{t("ord.awaitingBuyer")}</p>}
+              {buyer && (
+                <ButtonLink href={`/messages/${buyer.username}`} variant="ghost" size="sm" className="mt-3">
+                  <MessageCircle className="size-4" /> {t("ord.messageBuyer")}
+                </ButtonLink>
+              )}
+            </Card>
+          )}
+          <Card className="p-5">
+            <h2 className="mb-4 font-bold text-ink">{t("orders.timeline")}</h2>
+            <OrderTimeline order={o} onPhoto={setViewPhoto} />
           </Card>
 
           <Card className="overflow-hidden">
@@ -174,23 +172,46 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
         <aside className="space-y-4">
           <Card className="space-y-4 p-5 text-sm">
-            <div>
-              <p className="text-xs font-bold uppercase text-faint">{t("orders.tracking")}</p>
-              <p className="nums mt-0.5 flex items-center gap-2 font-bold text-ink">
-                {o.tracking}
-                <button
-                  onClick={() => {
-                    navigator.clipboard?.writeText(o.tracking).catch(() => {});
-                    toast({ text: t("orders.copied") });
-                  }}
-                  aria-label={t("orders.copy")}
-                  className="rounded p-1 text-muted hover:text-ink"
-                >
-                  <Copy className="size-3.5" />
+            {o.readyPhoto && (
+              <div>
+                <p className="text-xs font-bold uppercase text-faint">{t("ord.readyPhoto")}</p>
+                <button onClick={() => setViewPhoto(o.readyPhoto!)} className="relative mt-1 block aspect-square w-full overflow-hidden rounded-xl border border-line" aria-label={t("ord.openPhoto")}>
+                  <Image src={o.readyPhoto} alt={t("ord.readyPhoto")} fill sizes="300px" unoptimized className="object-cover" />
                 </button>
-              </p>
-              <p className="text-xs text-faint">{t("orders.trackingDemo")}</p>
-            </div>
+              </div>
+            )}
+            {o.shipment ? (
+              <div>
+                <p className="text-xs font-bold uppercase text-faint">{t("ord.shipment")}</p>
+                {o.shipment.carrier && <p className="font-semibold text-ink">{o.shipment.carrier}</p>}
+                {o.shipment.number && (
+                  <p className="nums mt-0.5 flex items-center gap-2 font-bold text-ink">
+                    {o.shipment.number}
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(o.shipment!.number!).catch(() => {}); toast({ text: t("orders.copied") }); }}
+                      aria-label={t("orders.copy")}
+                      className="rounded p-1 text-muted hover:text-ink"
+                    >
+                      <Copy className="size-3.5" />
+                    </button>
+                  </p>
+                )}
+                {o.shipment.url && (
+                  <a href={o.shipment.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink px-3 text-[13px] font-semibold text-white hover:bg-ink-deep">
+                    <ExternalLink className="size-3.5" /> {t("ord.track")}
+                  </a>
+                )}
+                <p className="mt-1 text-xs text-faint">{t("ord.noAutoTracking")}</p>
+              </div>
+            ) : (
+              o.tracking && ["in_transit", "arrived", "delivered", "received"].includes(o.status) && (
+                <div>
+                  <p className="text-xs font-bold uppercase text-faint">{t("orders.tracking")}</p>
+                  <p className="nums mt-0.5 font-bold text-ink">{o.tracking}</p>
+                  <p className="text-xs text-faint">{t("orders.trackingDemo")}</p>
+                </div>
+              )
+            )}
             {o.eta && (
               <div>
                 <p className="text-xs font-bold uppercase text-faint">{t("orders.etaLabel")}</p>
@@ -249,6 +270,9 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         </aside>
       </div>
 
+      {isSeller && nxt && step && <SellerStepModal order={o} to={nxt} onClose={() => setStep(false)} />}
+      <RejectModal open={reject} order={o} onClose={() => setReject(false)} />
+      <PhotoViewer src={viewPhoto} onClose={() => setViewPhoto(null)} />
       <Modal
         open={cancel}
         onClose={() => setCancel(false)}

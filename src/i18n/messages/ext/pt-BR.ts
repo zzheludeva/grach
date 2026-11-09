@@ -7,24 +7,22 @@ const ptBR: Dict = {
     all: "Todos", any: "Qualquer", saving: "Salvando…", errorGeneric: "Algo deu errado. Tente de novo.", forbidden: "Você não tem permissão para isso.",
     notSet: "Não preenchido", moveUp: "Para cima", moveDown: "Para baixo", create: "Criar",
   },
-  nav: { overview: "Visão geral", myProducts: "Meus produtos", myEvents: "Meus eventos", myProjects: "Meus projetos", sections: "Seções", account: "Pessoal" },
+  nav: { overview: "Visão geral", myProducts: "Meus produtos", myProjects: "Meus projetos", sections: "Seções", account: "Pessoal" },
   dashboard: { step2: "Adicione um produto", step2Text: "Publique uma peça no marketplace", step3: "Conduza uma oficina", step3Text: "Crie uma oficina ou um evento" },
   storage: { full: "Não foi possível salvar: o navegador ficou sem espaço para os dados de demonstração. Remova algumas fotos ou redefina os dados em Configurações." },
   notifications: {
     k: {
-      eventChanged: "Mudanças no evento “{title}”",
-      eventCancelled: "O evento “{title}” foi cancelado pelo organizador",
+      eventChanged: "Mudanças na oficina “{title}”", eventCancelled: "A turma de “{title}” foi cancelada pelo organizador",
     },
-    openEvent: "Abrir evento", markRead: "Marcar como lida",
+    openEvent: "Abrir oficina", markRead: "Marcar como lida",
   },
   ev: {
-    kind: { workshop: "Oficina", event: "Evento" },
     phase: { draft: "Rascunho", published: "Publicado", completed: "Concluído", cancelled: "Cancelado" },
     field: {
       startsAt: "Início", endsAt: "Término", timeZone: "Fuso horário", format: "Formato", place: "Local", onlineUrl: "Link de acesso",
       price: "Valor", program: "Programa", terms: "Condições de participação",
     },
-    change: { linkUpdated: "link atualizado — veja a página do evento", from: "Antes", to: "Agora", empty: "não informado" },
+    change: { linkUpdated: "link atualizado — veja a página da oficina", from: "Antes", to: "Agora", empty: "não informado" },
     form: {
       newTitle: "Nova oficina ou evento", editTitle: "Edição", subtitle: "Só você vê o rascunho. Depois de publicado, aparece em Aprender.",
       basics: "Básico", when: "Data e hora", where: "Local ou link", participation: "Participação",
@@ -156,7 +154,7 @@ const ptBR: Dict = {
     starter: { free: "Seu pedido" },
   },
   sx: {
-    type: { all: "Tudo", post: "Publicações", user: "Pessoas", product: "Produtos", workshop: "Oficinas", event: "Eventos", tutorial: "Aprender", project: "Meus projetos" },
+    type: { all: "Tudo", post: "Publicações", user: "Pessoas", product: "Produtos", workshop: "Oficinas", tutorial: "Aprender", project: "Meus projetos" },
     filters: "Filtros", show: { one: "Mostrar {count} resultado", other: "Mostrar {count} resultados" },
     found: { one: "{count} resultado encontrado", other: "{count} resultados encontrados" },
     resetAll: "Limpar filtros", remove: "Remover filtro: {label}", activeFilters: "Filtros ativos",
@@ -166,8 +164,7 @@ const ptBR: Dict = {
       shipsFrom: "País de envio", shipsToMe: "Entrega em {country}", inStock: "Em estoque", madeToOrder: "Sob encomenda ou personalizado", format: "Formato",
       city: "Cidade", when: "Data do evento", cost: "Valor", seats: "Com vagas", level: "Dificuldade", learnFormat: "Formato",
       availability: "Disponibilidade e entrega", seatsGroup: "Vagas",
-      postKind: "Tema", author: "Autor", projectStatus: "Status do projeto", eventKind: "Tipo",
-    },
+      postKind: "Tema", author: "Autor", projectStatus: "Status do projeto", },
     date: { any: "Qualquer data", d7: "Última semana", d30: "Último mês", y1: "Último ano" },
     when: { any: "Qualquer", week: "Próximos 7 dias", month: "Próximos 30 dias", past: "Passados" },
     cost: { any: "Qualquer", free: "Gratuito", paid: "Pago" },

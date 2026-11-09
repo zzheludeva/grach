@@ -1,8 +1,9 @@
 "use client";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Circle, Clock, Lock, Signal } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Clock, Lock, Signal, Pencil, PlayCircle, ExternalLink } from "lucide-react";
+import { techniqueName } from "@/i18n/content";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { rating, userById } from "@/lib/selectors";
@@ -16,13 +17,20 @@ import { cn } from "@/lib/utils";
 export default function TutorialPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { state, meId, actions } = useStore();
-  const { t, cat, money, relative, langName } = useI18n();
+  const { t, cat, money, relative, langName, locale } = useI18n();
   const toast = useToast();
   const d = state!.data;
   const tut = d.tutorials.find((x) => x.id === id);
   const [done, setDone] = useState<number[]>([]);
   const [buy, setBuy] = useState(false);
   const [rev, setRev] = useState({ rating: 5, text: "" });
+  useEffect(() => {
+    actions.viewTutorial(id);
+    // one view per visit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  // Drafts and hidden materials are visible to their author only.
+  if (tut && tut.status !== "published" && tut.authorId !== meId) return <EmptyState title={t("tut.page.unavailable")} action={<ButtonLink href="/learn">{t("nav.learn")}</ButtonLink>} />;
   if (!tut) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/learn">{t("nav.learn")}</ButtonLink>} />;
   const author = userById(d, tut.authorId)!;
   const owned = !tut.price || tut.authorId === meId || d.tutorialPurchases.some((p) => p.userId === meId && p.tutorialId === tut.id);
@@ -32,16 +40,24 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href="/learn" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> {t("nav.learn")}
-      </Link>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <Link href={tut.authorId === meId ? "/dashboard/tutorials" : "/learn"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
+          <ArrowLeft className="size-4 rtl:rotate-180" /> {tut.authorId === meId ? t("nav.myTutorials") : t("nav.learn")}
+        </Link>
+        {tut.authorId === meId && (
+          <ButtonLink href={`/dashboard/tutorials/${tut.id}`} size="sm" variant="soft"><Pencil className="size-3.5" /> {t("common.edit")}</ButtonLink>
+        )}
+      </div>
+      {tut.status !== "published" && <DemoNote className="mb-4">{tut.status === "draft" ? t("tut.page.draft") : t("tut.page.hidden")}</DemoNote>}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="min-w-0">
           <div className="relative aspect-[16/9] overflow-hidden rounded-3xl bg-line">
-            <Image src={tut.cover} alt={tut.title} fill priority sizes="(max-width: 1024px) 100vw, 640px" className="object-cover" />
+            {tut.cover && <Image src={tut.cover} alt={tut.title} fill priority sizes="(max-width: 1024px) 100vw, 640px" unoptimized={tut.cover.startsWith("data:")} className="object-cover" />}
           </div>
           <div className="mt-5 flex flex-wrap gap-1.5">
             <Badge>{cat(tut.category)}</Badge>
+            {tut.direction && <Badge>{tut.direction}</Badge>}
+            {tut.technique && <Badge tone="rust">{techniqueName(tut.technique, locale)}</Badge>}
             <Badge tone="info">
               <Signal className="size-3" /> {t(`level.${tut.level}`)}
             </Badge>
@@ -56,6 +72,22 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
             {tut.summary}
           </p>
           <p className="mt-2 text-xs text-faint">{t("translate.original", { lang: langName(tut.lang) })}</p>
+          {tut.content && <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={tut.lang}>{tut.content}</p>}
+          {tut.videoUrl && (
+            <a href={tut.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-deep">
+              <PlayCircle className="size-4" /> {t("tut.page.watch")}
+            </a>
+          )}
+          {tut.videoUrl && <p className="mt-1 text-xs text-faint">{t("tut.page.videoNote")}</p>}
+          {!!tut.images?.length && (
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {tut.images.map((src, i) => (
+                <div key={i} className="relative aspect-square overflow-hidden rounded-xl bg-line/40">
+                  <Image src={src} alt="" fill sizes="220px" unoptimized={src.startsWith("data:")} className="object-cover" />
+                </div>
+              ))}
+            </div>
+          )}
 
           <section className="mt-8">
             <h2 className="mb-3 text-lg font-bold text-ink">{t("learn.steps")}</h2>
@@ -73,7 +105,12 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
                           <span className="nums me-2 text-rust">{i + 1}.</span>
                           {s.title}
                         </p>
-                        <p className="mt-1 text-sm leading-relaxed text-text/85">{s.text}</p>
+                        <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-text/85">{s.text}</p>
+                        {s.image && (
+                          <div className="relative mt-2 aspect-[4/3] w-full max-w-xs overflow-hidden rounded-xl">
+                            <Image src={s.image} alt="" fill sizes="320px" unoptimized={s.image.startsWith("data:")} className="object-cover" />
+                          </div>
+                        )}
                       </div>
                     </Card>
                   </li>
@@ -163,6 +200,16 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
               </ul>
             </div>
           </Card>
+          {!!tut.links?.length && (
+            <Card className="p-5">
+              <p className="mb-2 text-sm font-bold text-ink">{t("tut.form.links")}</p>
+              <ul className="space-y-1.5 text-sm">
+                {tut.links.map((l, i) => (
+                  <li key={i}><a href={l.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-teal hover:underline"><ExternalLink className="size-3.5" />{l.label}</a></li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card className="flex items-center gap-3 p-4">
             <Avatar name={author.name} color={author.avatarColor} size={44} href={`/profile/${author.username}`} />
             <Link href={`/profile/${author.username}`} className="min-w-0 flex-1">

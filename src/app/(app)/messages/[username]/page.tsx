@@ -46,7 +46,18 @@ export default function Thread({ params }: { params: Promise<{ username: string 
           {msgs.map((m) => (
             <div key={m.id} className={cn("flex", m.fromId === meId ? "justify-end" : "justify-start")}>
               <div className={cn("max-w-[80%] rounded-2xl px-3.5 py-2 text-sm", m.fromId === meId ? "rounded-ee-sm bg-ink text-white" : "rounded-es-sm bg-surface text-text shadow-sm")}>
-                <p className="whitespace-pre-line">{m.text}</p>
+                {m.image && (
+                  <a href={m.image} target="_blank" rel="noopener noreferrer" className="mb-1.5 block overflow-hidden rounded-xl" aria-label={t("ord.openPhoto")}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.image} alt={t("ord.readyPhoto")} className="max-h-64 w-full object-cover" />
+                  </a>
+                )}
+                {m.orderId && (
+                  <Link href={`/orders/${m.orderId}`} className={cn("mb-1 block text-xs font-semibold underline", m.fromId === meId ? "text-white/80" : "text-teal")}>
+                    {t("ord.openOrder")}
+                  </Link>
+                )}
+                {m.text && <p className="whitespace-pre-line">{m.text}</p>}
                 <p className={cn("mt-0.5 text-[10px]", m.fromId === meId ? "text-white/60" : "text-faint")}>{date(m.at, "datetime")}</p>
               </div>
             </div>

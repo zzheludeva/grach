@@ -13,20 +13,22 @@ export function authorAnalytics(d: SeedData, me: string, periodDays: number, cur
   const inPeriod = (iso: string) => new Date(iso).getTime() >= since;
   const myProducts = d.products.filter((p) => p.sellerId === me && p.status !== "draft");
   const myWorkshops = d.workshops.filter((w) => w.hostId === me && w.status !== "draft");
-  const myTutorials = d.tutorials.filter((t) => t.authorId === me);
+  const myTutorials = d.tutorials.filter((t) => t.authorId === me && t.status !== "draft");
   const sales = d.orders.filter((o) => o.sellerId === me && o.status !== "cancelled");
   const salesP = sales.filter((o) => inPeriod(o.createdAt) && o.subtotal.currency === currency);
+  // Workshop income = each booking × seats × the price of THAT session (snapshot), never converted.
   const enroll = d.enrollments.filter((e) => myWorkshops.some((w) => w.id === e.workshopId));
   const enrollP = enroll.filter((e) => inPeriod(e.at));
   const tps = d.tutorialPurchases.filter((p) => myTutorials.some((t) => t.id === p.tutorialId));
   const tpsP = tps.filter((p) => inPeriod(p.at) && p.price.currency === currency);
-  const wsPrice = (id: string) => {
-    const w = myWorkshops.find((x) => x.id === id);
-    return w?.price && w.price.currency === currency ? w.price.amount : 0;
+  const bookingValue = (e: { sessionId: string; seats: number }) => {
+    const s = d.sessions.find((x) => x.id === e.sessionId);
+    if (!s || s.status === "cancelled") return 0;
+    return s.price && s.price.currency === currency ? s.price.amount * e.seats : 0;
   };
 
   const incomeProducts = salesP.reduce((s, o) => s + o.subtotal.amount, 0);
-  const incomeWorkshops = enrollP.reduce((s, e) => s + wsPrice(e.workshopId), 0);
+  const incomeWorkshops = enrollP.reduce((s, e) => s + bookingValue(e), 0);
   const incomeTutorials = tpsP.reduce((s, p) => s + p.price.amount, 0);
   const units = salesP.reduce((s, o) => s + o.items.reduce((a, i) => a + i.qty, 0), 0);
   const ordersCount = salesP.length;
@@ -50,7 +52,7 @@ export function authorAnalytics(d: SeedData, me: string, periodDays: number, cur
   });
   enroll.forEach((e) => {
     const m = months.find((x) => x.key === mk(e.at));
-    if (m) m.workshops += wsPrice(e.workshopId);
+    if (m) m.workshops += bookingValue(e);
   });
   tps.filter((p) => p.price.currency === currency).forEach((p) => {
     const m = months.find((x) => x.key === mk(p.at));

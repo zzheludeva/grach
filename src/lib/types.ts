@@ -149,54 +149,95 @@ export interface Tutorial {
   durationMin: number;
   price: Money | null;
   materials: string[];
-  steps: { title: string; text: string }[];
+  steps: { title: string; text: string; image?: string }[];
   reviews: Review[];
   lang: string;
   createdAt: string;
   technique?: string;
   format?: "steps" | "video";
+  /** Authoring: only published materials appear in Learning and search. */
+  status: TutorialStatus;
+  /** Free-text direction inside the category, e.g. "tableware". */
+  direction?: string;
+  /** Detailed content (long text). */
+  content?: string;
+  images?: string[];
+  /** External video link (no video hosting in the project). */
+  videoUrl?: string;
+  links?: { label: string; url: string }[];
+  views?: number;
+  updatedAt?: string;
 }
+export type TutorialStatus = "draft" | "published" | "hidden";
 
-export type WorkshopKind = "workshop" | "event";
-export type WorkshopStatus = "draft" | "published" | "cancelled";
-/** Lifecycle shown to people: "completed" is derived from the end time of a published event. */
-export type WorkshopPhase = WorkshopStatus | "completed";
+/** Template of a workshop: permanent information. Concrete dates live in WorkshopSession. */
+export type WorkshopStatus = "draft" | "published" | "archived";
 
 export interface Workshop {
   id: string;
   hostId: string;
   title: string;
   cover: string;
+  photos?: string[];
   category: CategoryId;
-  startsAt: string;
+  technique?: string;
+  level: Level | "any";
+  description: string;
+  program: string[];
+  materials: string[];
+  format: "online" | "offline";
+  /** Default price for new sessions; every session keeps its own snapshot. */
+  price: Money | null;
   durationMin: number;
+  terms?: string;
+  /** Default venue for offline sessions. */
+  country: string;
+  city?: string;
+  venue?: string;
+  /** How online sessions are held (platform name); the link itself is per session. */
+  onlineInfo?: string;
+  lang: string;
+  status: WorkshopStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SessionStatus = "scheduled" | "cancelled";
+/** Lifecycle shown to people: "completed" is derived from the end time. */
+export type SessionPhase = "upcoming" | "completed" | "cancelled";
+
+/** One concrete run of a workshop. Price/terms/place are copied from the template when created. */
+export interface WorkshopSession {
+  id: string;
+  workshopId: string;
+  hostId: string;
+  startsAt: string;
+  endsAt: string;
   timeZone: string;
   format: "online" | "offline";
   country: string;
   city?: string;
   venue?: string;
-  price: Money | null;
-  seatsTotal: number;
-  seatsTaken: number;
-  description: string;
-  program: string[];
-  lang: string;
-  kind: WorkshopKind;
-  status: WorkshopStatus;
-  endsAt: string;
-  /** Visible only to enrolled participants and the host. */
+  /** Visible only to people booked on this session and the host. */
   onlineUrl?: string;
-  level?: Level | "any";
-  materials?: string[];
+  seatsTotal: number;
+  /** Seats booked outside the app (seeded demo data). */
+  externalSeats?: number;
+  price: Money | null;
   terms?: string;
+  status: SessionStatus;
   createdAt: string;
   updatedAt: string;
   cancelledAt?: string;
 }
 
+/** A booking belongs to a concrete session; one per user and session, possibly for several seats. */
 export interface Enrollment {
+  id: string;
   userId: string;
+  sessionId: string;
   workshopId: string;
+  seats: number;
   at: string;
 }
 
@@ -228,6 +269,7 @@ export type OrderStatus =
   | "pending"
   | "confirmed"
   | "preparing"
+  | "ready"
   | "handed_over"
   | "in_transit"
   | "arrived"
@@ -241,6 +283,24 @@ export interface OrderItem {
   image: string;
   qty: number;
   unitPrice: Money;
+}
+
+/** One step in an order's history, with the proof attached to it. */
+export interface OrderEvent {
+  status: OrderStatus;
+  at: string;
+  from?: OrderStatus;
+  by?: string;
+  comment?: string;
+  photo?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  /** Buyer's response to a seller's transition. */
+  ack?: "pending" | "confirmed" | "rejected";
+  rejectReason?: string;
+  /** The step was created by the buyer rejecting the previous transition. */
+  revert?: boolean;
 }
 
 export interface Order {
@@ -257,8 +317,13 @@ export interface Order {
   shipping: Money;
   total: Money;
   status: OrderStatus;
-  history: { status: OrderStatus; at: string }[];
-  tracking: string; // demo tracking number
+  history: OrderEvent[];
+  /** Legacy demo tracking number of seeded orders (not a real shipment). */
+  tracking: string;
+  /** Photo of the finished item, required for "ready". */
+  readyPhoto?: string;
+  /** Proof of dispatch, required for "handed_over". */
+  shipment?: { carrier?: string; number?: string; url?: string; at: string };
   eta?: string;
   reviewed?: boolean;
 }
@@ -361,6 +426,8 @@ export interface Message {
   toId: string;
   text: string;
   at: string;
+  image?: string;
+  orderId?: string;
 }
 
 export interface Settings {
@@ -369,4 +436,6 @@ export interface Settings {
   timeZone: string;
   currency: CurrencyCode;
   city: string;
+  /** Organizer reminders before own workshop sessions. */
+  notify?: { remind24h: boolean; remind1h: boolean };
 }

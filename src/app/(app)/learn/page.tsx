@@ -8,7 +8,8 @@ import { CATEGORIES } from "@/i18n/content";
 import { Chip, EmptyState, PageHeader, Select, Tabs, SectionTitle } from "@/components/ui/primitives";
 import { TutorialCard, WorkshopCard } from "@/components/common/cards";
 import { region } from "@/lib/regions";
-import type { CategoryId, Level } from "@/lib/types";
+import type { CategoryId, Enrollment, Level, Workshop, WorkshopSession } from "@/lib/types";
+import { upcomingSessions } from "@/lib/workshops";
 import { Button } from "@/components/ui/button";
 
 type Tab = "materials" | "workshops" | "mine";
@@ -30,6 +31,7 @@ export default function Learn() {
     () =>
       d.tutorials.filter(
         (x) =>
+          x.status === "published" &&
           (!category || x.category === category) &&
           (!level || x.level === level) &&
           (!price || (price === "free" ? !x.price : !!x.price)) &&
@@ -37,20 +39,26 @@ export default function Learn() {
       ),
     [d, category, level, duration, price],
   );
+  // Templates with at least one upcoming date; city relevance uses the session's city.
   const workshops = useMemo(
     () =>
       d.workshops
-        .filter((w) => w.status === "published" && new Date(w.startsAt).getTime() > Date.now() - 3600_000)
-        .filter((w) => (!category || w.category === category) && (!price || (price === "free" ? !w.price : !!w.price)) && (!format || w.format === format))
-        // City relevance: online events are always shown; offline ones only in the chosen city (unless widened).
-        .filter((w) => w.format === "online" || !cityOnly || w.city === settings.city)
-        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+        .filter((w) => w.status === "published")
+        .map((w) => ({ w, s: upcomingSessions(d, w.id).find((s) => w.format === "online" || !cityOnly || s.city === settings.city) }))
+        .filter((x): x is { w: Workshop; s: WorkshopSession } => !!x.s)
+        .filter(({ w, s }) => (!category || w.category === category) && (!price || (price === "free" ? !s.price : !!s.price)) && (!format || w.format === format))
+        .sort((a, b) => a.s.startsAt.localeCompare(b.s.startsAt)),
     [d, category, price, format, cityOnly, settings.city],
   );
-  const myWorkshops = d.enrollments.filter((e) => e.userId === meId).map((e) => d.workshops.find((w) => w.id === e.workshopId)!).filter(Boolean);
+  const myBookings = d.enrollments
+    .filter((e) => e.userId === meId)
+    .map((e) => ({ e, w: d.workshops.find((w) => w.id === e.workshopId), s: d.sessions.find((s) => s.id === e.sessionId) }))
+    .filter((x): x is { e: Enrollment; w: Workshop; s: WorkshopSession } => !!x.w && !!x.s)
+    .sort((a, b) => a.s.startsAt.localeCompare(b.s.startsAt));
+  const myWorkshops = myBookings;
   const myTutorials = d.tutorialPurchases.filter((p) => p.userId === meId).map((p) => d.tutorials.find((x) => x.id === p.tutorialId)!).filter(Boolean);
-  const enrolledIds = new Set(myWorkshops.map((w) => w.id));
-  const offlineElsewhere = d.workshops.filter((w) => w.status === "published" && w.format === "offline" && w.city !== settings.city).length;
+  const enrolledIds = new Set(myBookings.map((x) => x.e.sessionId));
+  const offlineElsewhere = d.sessions.filter((s) => s.format === "offline" && s.status === "scheduled" && s.city !== settings.city && new Date(s.startsAt).getTime() > Date.now()).length;
 
   const reset = () => {
     setCategory("");
@@ -70,7 +78,7 @@ export default function Learn() {
           history.replaceState(null, "", `?tab=${v}`);
         }}
         items={[
-          { value: "materials", label: t("learn.materials"), count: d.tutorials.length },
+          { value: "materials", label: t("learn.materials"), count: d.tutorials.filter((x) => x.status === "published").length },
           { value: "workshops", label: t("learn.workshops") },
           { value: "mine", label: t("learn.mine"), count: myWorkshops.length + myTutorials.length },
         ]}
@@ -164,8 +172,8 @@ export default function Learn() {
       {tab === "workshops" &&
         (workshops.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            {workshops.map((w) => (
-              <WorkshopCard key={w.id} w={w} enrolled={enrolledIds.has(w.id)} />
+            {workshops.map(({ w, s }) => (
+              <WorkshopCard key={w.id} w={w} session={s} enrolled={enrolledIds.has(s.id)} />
             ))}
           </div>
         ) : (
@@ -190,8 +198,8 @@ export default function Learn() {
             <SectionTitle>{t("learn.myWorkshops")}</SectionTitle>
             {myWorkshops.length ? (
               <div className="grid gap-4 lg:grid-cols-2">
-                {myWorkshops.map((w) => (
-                  <WorkshopCard key={w.id} w={w} enrolled />
+                {myWorkshops.map(({ e, w, s }) => (
+                  <WorkshopCard key={e.id} w={w} session={s} enrolled />
                 ))}
               </div>
             ) : (

@@ -222,7 +222,8 @@ function FilterPanel({
   userName: (id: string) => string;
 }) {
   const { t, cat, langName, locale } = useI18n();
-  const { settings } = useStore();
+  const { settings, state } = useStore();
+  const d = state!.data;
   const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x))];
   const langs = uniq(pool.map((i) => i.lang));
   const countries = uniq(pool.map((i) => i.country));
@@ -240,7 +241,7 @@ function FilterPanel({
   products.forEach((p) => p.materials.forEach((m) => matCounts.set(m, (matCounts.get(m) ?? 0) + 1)));
   const topMats = [...matCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([m]) => m);
   const selMats = (f.mat ?? "").split(",").filter(Boolean);
-  const cities = uniq(pool.filter((i) => i.type === "workshop" || i.type === "event").map((i) => (i.ref as Workshop).city));
+  const cities = uniq(pool.filter((i) => i.type === "workshop").flatMap((i) => d.sessions.filter((x) => x.workshopId === i.id && x.status === "scheduled").map((x) => x.city)));
   const authors = uniq(pool.filter((i) => i.type === "post").map((i) => (i.ref as Post).authorId));
   const shipFrom = uniq(products.map((p) => p.shipsFrom));
 
@@ -304,7 +305,7 @@ function FilterPanel({
         </>
       )}
 
-      {(type === "workshop" || type === "event") && (
+      {type === "workshop" && (
         <>
           <Group label={t("sx.f.format")}>
             <div className="flex gap-1.5">
@@ -318,6 +319,7 @@ function FilterPanel({
           {cities.length > 0 && f.fmt !== "online" && <Group label={t("sx.f.city")}>{sel("city", cities.map((v) => ({ v, l: v })))}</Group>}
           <Group label={t("sx.f.when")}>{sel("when", (["week", "month", "past"] as const).map((v) => ({ v, l: t(`sx.when.${v}`) })), t("sx.when.any"))}</Group>
           <Group label={t("sx.f.cost")}>{sel("cost", (["free", "paid"] as const).map((v) => ({ v, l: t(`sx.cost.${v}`) })), t("sx.cost.any"))}</Group>
+          {techs.length > 0 && <Group label={t("sx.f.technique")}>{sel("tech", techs.map((x) => ({ v: x.id, l: x.name[locale] })))}</Group>}
           {type === "workshop" && <Group label={t("sx.f.level")}>{sel("level", (["beginner", "intermediate", "advanced"] as const).map((v) => ({ v, l: t(`level.${v}`) })))}</Group>}
           <Group label={t("sx.f.seatsGroup")}>
             <Toggle label={t("sx.f.seats")} on={!!f.seats} onChange={(v) => setFilter("seats", v ? "1" : "")} />
@@ -342,6 +344,7 @@ function FilterPanel({
 function Results({ type, items }: { type: SearchType; items: SearchItem[] }) {
   const [limit, setLimit] = useState(30);
   const { t } = useI18n();
+  const { state } = useStore();
   const shown = items.slice(0, limit);
   const more = items.length > limit && (
     <div className="mt-6 flex justify-center">
@@ -355,10 +358,10 @@ function Results({ type, items }: { type: SearchType; items: SearchItem[] }) {
         {more}
       </>
     );
-  if (type === "workshop" || type === "event")
+  if (type === "workshop")
     return (
       <>
-        <div className="grid gap-4 xl:grid-cols-2">{shown.map((i) => <WorkshopCard key={i.id} w={i.ref as Workshop} />)}</div>
+        <div className="grid gap-4 xl:grid-cols-2">{shown.map((i) => <WorkshopCard key={i.id} w={i.ref as Workshop} session={state!.data.sessions.find((x) => x.workshopId === i.id && x.startsAt === i.eventAt)} />)}</div>
         {more}
       </>
     );
@@ -410,12 +413,11 @@ function Row({ it }: { it: SearchItem }) {
       extra = <Price value={p.price} className="text-sm font-bold text-ink" />;
       break;
     }
-    case "workshop":
-    case "event": {
+    case "workshop": {
       const w = it.ref as Workshop;
       href = `/learn/workshop/${w.id}`;
       img = w.cover;
-      meta = `${date(w.startsAt, "datetime")} · ${w.format === "online" ? t("workshop.online") : w.city ?? ""}`;
+      meta = `${it.eventAt ? date(it.eventAt, "datetime") : t("ws.noDates")} · ${w.format === "online" ? t("workshop.online") : w.city ?? ""}`;
       break;
     }
     case "tutorial": {

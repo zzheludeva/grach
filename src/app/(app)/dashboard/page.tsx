@@ -9,7 +9,8 @@ import { authorAnalytics } from "@/lib/analytics";
 import { Badge, Card, DemoNote, EmptyState, PageHeader, SectionTitle, Tabs } from "@/components/ui/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { FollowersChart, IncomeChart, SERIES } from "@/components/dashboard/Charts";
-import { STATUS_TONE, nextStatus } from "@/lib/orders";
+import { STATUS_TONE, sellerNext, pendingAck } from "@/lib/orders";
+import { nextSession, seatsTaken } from "@/lib/workshops";
 import { statusLabelKey } from "@/components/common/OrderStatusBadge";
 import { userById } from "@/lib/selectors";
 import { useShell } from "@/components/shell/AppShell";
@@ -94,7 +95,7 @@ export default function Dashboard() {
                 <p className="font-bold text-ink">{t("dashboard.step2")}</p>
                 <p className="text-xs text-muted">{t("dashboard.step2Text")}</p>
               </Link>
-              <Link href="/dashboard/events/new" className="rounded-2xl border border-line p-4 hover:border-ink/40">
+              <Link href="/dashboard/workshops/new" className="rounded-2xl border border-line p-4 hover:border-ink/40">
                 <GraduationCap className="mb-2 size-5 text-saffron" />
                 <p className="font-bold text-ink">{t("dashboard.step3")}</p>
                 <p className="text-xs text-muted">{t("dashboard.step3Text")}</p>
@@ -270,7 +271,8 @@ export default function Dashboard() {
             <ul className="divide-y divide-line">
               {a.incoming.slice(0, 6).map((o) => {
                 const buyer = userById(d, o.buyerId);
-                const n = nextStatus(o.status);
+                const n = sellerNext(o.status);
+                const waiting = pendingAck(o);
                 return (
                   <li key={o.id} className="flex flex-wrap items-center gap-2 py-2.5">
                     <div className="min-w-0 flex-1">
@@ -283,18 +285,11 @@ export default function Dashboard() {
                     </div>
                     <span className="nums text-sm font-semibold">{money(o.total)}</span>
                     <Badge tone={STATUS_TONE[o.status]}>{t(statusLabelKey(o.status, o.deliveryMethod))}</Badge>
-                    {n && o.status !== "cancelled" && ["pending", "confirmed", "preparing"].includes(o.status) && (
-                      <Button
-                        size="sm"
-                        variant="soft"
-                        onClick={() => {
-                          actions.advanceOrder(o.id);
-                          toast({ text: t("orders.advanced", { status: t(statusLabelKey(n, o.deliveryMethod)) }), tone: "info" });
-                        }}
-                      >
-                        <FastForward className="size-3.5" /> {o.status === "pending" ? t("dashboard.confirmOrder") : t("dashboard.nextStage")}
-                      </Button>
-                    )}
+                    {waiting && <Badge tone="warn">{t("ord.awaitingBuyer")}</Badge>}
+                    {/* Every step needs its own confirmation (photo, tracking) — done on the order page. */}
+                    <ButtonLink href={`/orders/${o.id}`} size="sm" variant={n ? "soft" : "ghost"}>
+                      {n ? <FastForward className="size-3.5" /> : null} {n ? t(`ord.action.${n}`) : t("ord.open")}
+                    </ButtonLink>
                   </li>
                 );
               })}
@@ -309,13 +304,14 @@ export default function Dashboard() {
             </div>
           ) : (
             <ul className="space-y-3">
-              {a.myWorkshops.map((w) => {
-                const list = a.enroll.filter((e) => e.workshopId === w.id);
+              {a.myWorkshops.slice(0, 5).map((w) => {
+                const nx = nextSession(d, w.id);
+                const list = nx ? a.enroll.filter((e) => e.sessionId === nx.id) : [];
                 return (
                   <li key={w.id} className="rounded-xl border border-line p-3">
-                    <Link href={`/learn/workshop/${w.id}`} className="font-bold text-ink hover:underline">{w.title}</Link>
+                    <Link href={`/dashboard/workshops/${w.id}`} className="font-bold text-ink hover:underline">{w.title}</Link>
                     <p className="nums text-xs text-muted">
-                      {date(w.startsAt, "long")} · {t("workshop.taken", { taken: w.seatsTaken, total: w.seatsTotal })}
+                      {nx ? `${date(nx.startsAt, "datetime")} · ${t("workshop.taken", { taken: seatsTaken(d, nx), total: nx.seatsTotal })}` : t("ws.noDates")}
                     </p>
                     {list.length > 0 && (
                       <p className="mt-1 text-xs text-muted">
@@ -331,8 +327,8 @@ export default function Dashboard() {
             <p className="mt-3 text-xs text-muted">{t("dashboard.tutorialsSold", { count: d.tutorialPurchases.filter((p) => a.myTutorials.some((x) => x.id === p.tutorialId)).length })}</p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            <ButtonLink href="/dashboard/events" variant="soft" size="sm">
-              {t("nav.myEvents")}
+            <ButtonLink href="/dashboard/workshops" variant="soft" size="sm">
+              {t("nav.myWorkshops")}
             </ButtonLink>
             <ButtonLink href={`/profile/${me!.username}`} variant="ghost" size="sm">
               {t("dashboard.viewProfile")}

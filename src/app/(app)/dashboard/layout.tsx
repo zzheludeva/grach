@@ -1,14 +1,15 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartColumnBig, Store, CalendarDays, FolderKanban } from "lucide-react";
+import { ChartColumnBig, Store, CalendarDays, FolderKanban, BookOpen } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { cn } from "@/lib/utils";
 
 const SUB = [
   { href: "/dashboard", key: "overview", icon: ChartColumnBig, exact: true },
   { href: "/dashboard/products", key: "myProducts", icon: Store },
-  { href: "/dashboard/events", key: "myEvents", icon: CalendarDays },
+  { href: "/dashboard/workshops", key: "myWorkshops", icon: CalendarDays },
+  { href: "/dashboard/tutorials", key: "myTutorials", icon: BookOpen },
   { href: "/dashboard/projects", key: "myProjects", icon: FolderKanban },
 ] as const;
 

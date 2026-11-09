@@ -7,24 +7,22 @@ const es: Dict = {
     all: "Todos", any: "Cualquiera", saving: "Guardando…", errorGeneric: "Algo salió mal. Inténtalo de nuevo.", forbidden: "No tienes permiso para hacer esto.",
     notSet: "Sin completar", moveUp: "Subir", moveDown: "Bajar", create: "Crear",
   },
-  nav: { overview: "Resumen", myProducts: "Mis productos", myEvents: "Mis eventos", myProjects: "Mis proyectos", sections: "Secciones", account: "Personal" },
+  nav: { overview: "Resumen", myProducts: "Mis productos", myProjects: "Mis proyectos", sections: "Secciones", account: "Personal" },
   dashboard: { step2: "Añade un producto", step2Text: "Publica una pieza en el marketplace", step3: "Imparte un taller", step3Text: "Crea un taller o un evento" },
   storage: { full: "No se pudieron guardar los cambios: el navegador se quedó sin espacio para los datos de demostración. Elimina algunas fotos o restablece los datos en Ajustes." },
   notifications: {
     k: {
-      eventChanged: "Cambios en el evento «{title}»",
-      eventCancelled: "El organizador canceló el evento «{title}»",
+      eventChanged: "Cambios en el taller «{title}»", eventCancelled: "El organizador canceló la sesión de «{title}»",
     },
-    openEvent: "Abrir evento", markRead: "Marcar como leída",
+    openEvent: "Abrir taller", markRead: "Marcar como leída",
   },
   ev: {
-    kind: { workshop: "Taller", event: "Evento" },
     phase: { draft: "Borrador", published: "Publicado", completed: "Finalizado", cancelled: "Cancelado" },
     field: {
       startsAt: "Inicio", endsAt: "Fin", timeZone: "Zona horaria", format: "Formato", place: "Lugar", onlineUrl: "Enlace de conexión",
       price: "Precio", program: "Programa", terms: "Condiciones de participación",
     },
-    change: { linkUpdated: "enlace actualizado: míralo en la página del evento", from: "Antes", to: "Ahora", empty: "sin indicar" },
+    change: { linkUpdated: "enlace actualizado: míralo en la página del taller", from: "Antes", to: "Ahora", empty: "sin indicar" },
     form: {
       newTitle: "Nuevo taller o evento", editTitle: "Edición", subtitle: "Solo tú ves el borrador. Al publicarlo aparecerá en Aprender.",
       basics: "Básico", when: "Fecha y hora", where: "Lugar o enlace", participation: "Participación",
@@ -156,7 +154,7 @@ const es: Dict = {
     starter: { free: "Tu propia petición" },
   },
   sx: {
-    type: { all: "Todo", post: "Publicaciones", user: "Personas", product: "Productos", workshop: "Talleres", event: "Eventos", tutorial: "Aprender", project: "Mis proyectos" },
+    type: { all: "Todo", post: "Publicaciones", user: "Personas", product: "Productos", workshop: "Talleres", tutorial: "Aprender", project: "Mis proyectos" },
     filters: "Filtros", show: { one: "Mostrar {count} resultado", other: "Mostrar {count} resultados" },
     found: { one: "{count} resultado", other: "{count} resultados" },
     resetAll: "Restablecer filtros", remove: "Quitar filtro: {label}", activeFilters: "Filtros activos",
@@ -166,8 +164,7 @@ const es: Dict = {
       shipsFrom: "País de envío", shipsToMe: "Envío a {country}", inStock: "En stock", madeToOrder: "Por encargo o personalizado", format: "Formato",
       city: "Ciudad", when: "Fecha del evento", cost: "Precio", seats: "Con plazas libres", level: "Dificultad", learnFormat: "Formato",
       availability: "Disponibilidad y envío", seatsGroup: "Plazas",
-      postKind: "Temática", author: "Autor", projectStatus: "Estado del proyecto", eventKind: "Tipo",
-    },
+      postKind: "Temática", author: "Autor", projectStatus: "Estado del proyecto", },
     date: { any: "Cualquier fecha", d7: "Última semana", d30: "Último mes", y1: "Último año" },
     when: { any: "Cualquiera", week: "Próximos 7 días", month: "Próximos 30 días", past: "Pasados" },
     cost: { any: "Cualquiera", free: "Gratis", paid: "De pago" },

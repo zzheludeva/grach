@@ -20,12 +20,17 @@ import type {
   Settings,
   User,
   Workshop,
+  WorkshopSession,
+  Enrollment,
+  Tutorial,
+  OrderEvent,
 } from "./types";
-import { eventAudience, significantChanges, durationMin } from "./workshops";
+import { applyTemplateToSession, dueReminder, legacyEnrollment, seatsLeft, sessionAudience, significantChanges, splitLegacy, templateDiffForSessions, type ApplyMode, type LegacyWorkshop } from "./workshops";
+import { pendingAck, canConfirmReceived, validateTransition, type TransitionError, type TransitionProof } from "./orders";
 import { DAY, uid } from "./utils";
 import { region } from "./regions";
 import { detectLocale } from "@/i18n/config";
-import { nextStatus, canCancel } from "./orders";
+import { canCancel } from "./orders";
 
 /**
  * Client-side demo repository. All mutations go through `actions`, so swapping
@@ -36,7 +41,7 @@ import { nextStatus, canCancel } from "./orders";
 const STORAGE_KEY = "remeslo:v3";
 
 export interface AppState {
-  version: 4;
+  version: 5;
   sessionUserId: string | null;
   deviceLang: Locale;
   langSuggested: boolean;
@@ -51,7 +56,7 @@ function defaultSettings(country: CountryCode, lang: Locale, city?: string): Set
 
 function initialState(lang: Locale): AppState {
   return {
-    version: 4,
+    version: 5,
     sessionUserId: null,
     deviceLang: lang,
     langSuggested: true,
@@ -81,7 +86,8 @@ function useBuildStore() {
       if (raw) s = JSON.parse(raw) as AppState;
     } catch {}
     if (s && (s.version as number) === 3) s = migrateV3(s);
-    if (!s || s.version !== 4) s = initialState(detectLocale(navigator.languages));
+    if (s && (s.version as number) === 4) s = migrateV4(s);
+    if (!s || s.version !== 5) s = initialState(detectLocale(navigator.languages));
     setState(s);
     loaded.current = true;
   }, []);
@@ -97,6 +103,49 @@ function useBuildStore() {
       setStorageError(true);
     }
   }, [state]);
+
+  /*
+   * Organizer reminders (24 h and 1 h before a session). In the demo the local database is
+   * checked on load and every minute; in production the same rule runs as a scheduled job
+   * (pg_cron → send_session_reminders() in the Supabase migration). Each window is sent once.
+   */
+  useEffect(() => {
+    if (!state) return;
+    const tick = () =>
+      setState((s) => {
+        if (!s) return s;
+        const nowMs = Date.now();
+        const sent = new Set(s.data.reminderLog ?? []);
+        const fresh: AppNotification[] = [];
+        for (const ses of s.data.sessions ?? []) {
+          const w = s.data.workshops.find((x) => x.id === ses.workshopId);
+          if (!w || w.status !== "published") continue;
+          const prefs = s.settingsByUser[ses.hostId]?.notify ?? { remind24h: true, remind1h: true };
+          const kind = dueReminder(ses, nowMs, prefs, sent);
+          if (!kind) continue;
+          sent.add(`${ses.id}:${kind}`);
+          if (kind === "1h") sent.add(`${ses.id}:24h`);
+          const count = (ses.externalSeats ?? 0) + s.data.enrollments.filter((e) => e.sessionId === ses.id).reduce((n, e) => n + e.seats, 0);
+          fresh.push({
+            id: `n_rem_${ses.id}_${kind}`,
+            userId: ses.hostId,
+            type: "workshop",
+            key: kind === "24h" ? "reminder24" : "reminder1",
+            params: { title: w.title, startsAt: ses.startsAt, format: `@workshop.${ses.format}`, count },
+            href: `/dashboard/workshops/${w.id}`,
+            at: new Date(nowMs).toISOString(),
+            read: false,
+          });
+        }
+        if (!fresh.length) return s;
+        return { ...s, data: { ...s.data, reminderLog: [...sent], notifications: [...fresh, ...s.data.notifications.filter((n) => !fresh.some((f) => f.id === n.id))] } };
+      });
+    tick();
+    const t = setInterval(tick, 60_000);
+    return () => clearInterval(t);
+    // run once the state is loaded
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state !== null]);
 
   const update = useCallback((fn: (d: SeedData, s: AppState) => Partial<SeedData> | void) => {
     setState((s) => {
@@ -268,9 +317,9 @@ function useBuildStore() {
       viewPost(postId: string) {
         update((d) => ({ posts: d.posts.map((p) => (p.id === postId ? { ...p, views: p.views + 1 } : p)) }));
       },
-      sendMessage(toId: string, text: string) {
-        if (!meId || !text.trim()) return;
-        update((d) => ({ messages: [...d.messages, { id: uid("m"), fromId: meId, toId, text: text.trim(), at: now() }] }));
+      sendMessage(toId: string, text: string, extra: { image?: string; orderId?: string } = {}) {
+        if (!meId || (!text.trim() && !extra.image)) return;
+        update((d) => ({ messages: [...d.messages, { id: uid("m"), fromId: meId, toId, text: text.trim(), at: now(), ...extra }] }));
       },
 
       /* ---------- cart & orders ---------- */
@@ -375,35 +424,119 @@ function useBuildStore() {
       cancelOrder(orderId: string) {
         update((d) => ({
           orders: d.orders.map((o) =>
-            o.id === orderId && canCancel(o.status) ? { ...o, status: "cancelled", eta: undefined, history: [...o.history, { status: "cancelled", at: now() }] } : o,
+            o.id === orderId && o.buyerId === meId && canCancel(o.status)
+              ? { ...o, status: "cancelled", eta: undefined, history: [...o.history, { status: "cancelled", from: o.status, by: meId!, at: now() }] }
+              : o,
           ),
-        }));
-      },
-      /** Demo-only: moves the order to the next lifecycle stage (no real carrier). */
-      advanceOrder(orderId: string) {
-        update((d) => ({
-          orders: d.orders.map((o) => {
-            if (o.id !== orderId) return o;
-            const n = nextStatus(o.status);
-            if (!n) return o;
-            return { ...o, status: n, eta: n === "delivered" || n === "received" ? undefined : o.eta, history: [...o.history, { status: n, at: now() }] };
-          }),
           notifications: (() => {
             const o = d.orders.find((x) => x.id === orderId);
-            if (!o) return d.notifications;
-            return [{ id: uid("n"), userId: o.buyerId, type: "order", key: "orderStatus", params: { number: o.number }, href: `/orders/${o.id}`, at: now(), read: true }, ...d.notifications];
+            return o && o.buyerId === meId && canCancel(o.status)
+              ? [{ id: uid("n"), userId: o.sellerId, type: "order" as const, actorId: meId!, key: "orderCancelledByBuyer", params: { number: o.number }, href: `/orders/${o.id}`, at: now(), read: false }, ...d.notifications]
+              : d.notifications;
           })(),
         }));
+      },
+      /**
+       * Seller moves the order one step forward. Important steps require proof
+       * (photo for "ready", tracking number or link for "handed_over"); the buyer is notified
+       * and can accept or reject the step. The photo is also sent to the buyer in messages.
+       */
+      transitionOrder(orderId: string, to: OrderStatus, proof: TransitionProof, messageText = ""): { ok: true } | { error: TransitionError } {
+        const snap = stateRef.current;
+        const o = snap?.data.orders.find((x) => x.id === orderId);
+        if (!meId || !snap || !o) return { error: "forbidden" };
+        const err = validateTransition(o, meId, to, proof);
+        if (err) return { error: err };
+        const at = now();
+        const clean = (v?: string) => (v && v.trim() ? v.trim() : undefined);
+        const ev: OrderEvent = {
+          status: to,
+          from: o.status,
+          at,
+          by: meId,
+          comment: clean(proof.comment),
+          photo: proof.photo,
+          carrier: clean(proof.carrier),
+          trackingNumber: clean(proof.trackingNumber),
+          trackingUrl: clean(proof.trackingUrl),
+          ack: "pending",
+        };
+        const note: AppNotification = {
+          id: uid("n"), userId: o.buyerId, type: "order", actorId: meId, key: "orderStep", params: { number: o.number, status: `@orderStatus.${to}` }, href: `/orders/${o.id}`, at, read: false,
+        };
+        const msg = to === "ready" && proof.photo ? { id: uid("m"), fromId: meId, toId: o.buyerId, text: [messageText, clean(proof.comment)].filter(Boolean).join("\n\n"), image: proof.photo, orderId: o.id, at } : null;
+        update((d) => ({
+          orders: d.orders.map((x) =>
+            x.id === orderId
+              ? {
+                  ...x,
+                  status: to,
+                  history: [...x.history, ev],
+                  readyPhoto: to === "ready" ? proof.photo : x.readyPhoto,
+                  shipment: to === "handed_over" ? { carrier: ev.carrier, number: ev.trackingNumber, url: ev.trackingUrl, at } : x.shipment,
+                }
+              : x,
+          ),
+          notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
+          messages: msg ? [...d.messages.filter((m) => m.id !== msg.id), msg] : d.messages,
+        }));
+        return { ok: true };
+      },
+      /** Buyer accepts the latest seller step. */
+      ackOrderStep(orderId: string) {
+        update((d) => ({
+          orders: d.orders.map((o) => {
+            if (o.id !== orderId || o.buyerId !== meId || !pendingAck(o)) return o;
+            const h = [...o.history];
+            h[h.length - 1] = { ...h[h.length - 1], ack: "confirmed" };
+            return { ...o, history: h };
+          }),
+        }));
+      },
+      /** Buyer rejects the latest seller step with a reason: the order returns to the previous status. */
+      rejectOrderStep(orderId: string, reason: string) {
+        const snap = stateRef.current;
+        const o = snap?.data.orders.find((x) => x.id === orderId);
+        const last = o && pendingAck(o);
+        if (!meId || !o || o.buyerId !== meId || !last?.from || !reason.trim()) return false;
+        const at = now();
+        const from = last.from;
+        const note: AppNotification = {
+          id: uid("n"), userId: o.sellerId, type: "order", actorId: meId, key: "orderStepRejected", params: { number: o.number, status: `@orderStatus.${last.status}`, reason: reason.trim() }, href: `/orders/${o.id}`, at, read: false,
+        };
+        update((d) => ({
+          orders: d.orders.map((x) => {
+            if (x.id !== orderId) return x;
+            const h = [...x.history];
+            h[h.length - 1] = { ...h[h.length - 1], ack: "rejected", rejectReason: reason.trim() };
+            h.push({ status: from, from: last.status, at, by: meId, comment: reason.trim(), revert: true });
+            return {
+              ...x,
+              status: from,
+              history: h,
+              readyPhoto: last.status === "ready" ? undefined : x.readyPhoto,
+              shipment: last.status === "handed_over" ? undefined : x.shipment,
+            };
+          }),
+          notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
+        }));
+        return true;
       },
       confirmReceived(orderId: string) {
         update((d) => ({
           orders: d.orders.map((o) => {
-            if (o.id !== orderId || !["arrived", "delivered"].includes(o.status)) return o;
-            const hist = [...o.history];
-            if (o.status === "arrived") hist.push({ status: "delivered", at: now() });
-            hist.push({ status: "received", at: now() });
-            return { ...o, status: "received", eta: undefined, history: hist };
+            if (o.id !== orderId || o.buyerId !== meId || !canConfirmReceived(o.status)) return o;
+            const h = [...o.history];
+            if (h[h.length - 1]?.ack === "pending") h[h.length - 1] = { ...h[h.length - 1], ack: "confirmed" };
+            h.push({ status: "received", from: o.status, by: meId!, at: now() });
+            return { ...o, status: "received", eta: undefined, history: h };
           }),
+          notifications: (() => {
+            const o = d.orders.find((x) => x.id === orderId);
+            return o && o.buyerId === meId && canConfirmReceived(o.status)
+              ? [{ id: uid("n"), userId: o.sellerId, type: "order" as const, actorId: meId!, key: "orderReceived", params: { number: o.number }, href: `/orders/${o.id}`, at: now(), read: false }, ...d.notifications]
+              : d.notifications;
+          })(),
         }));
       },
       addProductReview(orderId: string, productId: string, rating: number, text: string) {
@@ -415,31 +548,42 @@ function useBuildStore() {
       },
 
       /* ---------- learning ---------- */
-      enroll(workshopId: string) {
-        if (!meId) return false;
-        let ok = false;
-        update((d) => {
-          const w = d.workshops.find((x) => x.id === workshopId);
-          if (!w || w.status !== "published" || w.seatsTaken >= w.seatsTotal || d.enrollments.some((e) => e.userId === meId && e.workshopId === workshopId)) return;
-          ok = true;
-          return {
-            enrollments: [...d.enrollments, { userId: meId, workshopId, at: now() }],
-            workshops: d.workshops.map((x) => (x.id === workshopId ? { ...x, seatsTaken: x.seatsTaken + 1 } : x)),
-            notifications: [
-              { id: uid("n"), userId: w.hostId, type: "workshop", actorId: meId, key: "enrolled", params: { title: w.title }, href: `/learn/workshop/${w.id}`, at: now(), read: false },
-              ...d.notifications,
-            ],
-          };
-        });
-        return ok;
+      /** Books seats on a concrete session. One booking per user and session; seats are re-counted. */
+      enroll(sessionId: string, seats = 1): "ok" | "full" | "duplicate" | "closed" {
+        const snap = stateRef.current;
+        if (!meId || !snap) return "closed";
+        const s = snap.data.sessions.find((x) => x.id === sessionId);
+        const w = s && snap.data.workshops.find((x) => x.id === s.workshopId);
+        if (!s || !w || w.status !== "published" || s.status !== "scheduled" || new Date(s.startsAt).getTime() <= Date.now()) return "closed";
+        if (s.hostId === meId) return "closed";
+        if (snap.data.enrollments.some((e) => e.userId === meId && e.sessionId === sessionId)) return "duplicate";
+        const n = Math.max(1, Math.floor(seats));
+        if (n > seatsLeft(snap.data, s)) return "full";
+        const at = now();
+        const booking: Enrollment = { id: uid("e"), userId: meId, sessionId, workshopId: w.id, seats: n, at };
+        const note: AppNotification = { id: uid("n"), userId: w.hostId, type: "workshop", actorId: meId, key: "enrolledSession", params: { title: w.title, count: n }, href: `/dashboard/workshops/${w.id}`, at, read: false };
+        update((d) => ({
+          enrollments: [...d.enrollments.filter((e) => !(e.userId === meId && e.sessionId === sessionId)), booking],
+          notifications: [note, ...d.notifications.filter((x) => x.id !== note.id)],
+        }));
+        return "ok";
       },
-      cancelEnrollment(workshopId: string) {
+      cancelEnrollment(sessionId: string) {
         if (!meId) return;
         update((d) => {
-          if (!d.enrollments.some((e) => e.userId === meId && e.workshopId === workshopId)) return;
+          if (!d.enrollments.some((e) => e.userId === meId && e.sessionId === sessionId)) return;
+          return { enrollments: d.enrollments.filter((e) => !(e.userId === meId && e.sessionId === sessionId)) };
+        });
+      },
+      /** Host removes a participant's booking from their own session. */
+      removeBooking(enrollmentId: string) {
+        update((d) => {
+          const e = d.enrollments.find((x) => x.id === enrollmentId);
+          const s = e && d.sessions.find((x) => x.id === e.sessionId);
+          if (!e || !s || s.hostId !== meId) return;
           return {
-            enrollments: d.enrollments.filter((e) => !(e.userId === meId && e.workshopId === workshopId)),
-            workshops: d.workshops.map((x) => (x.id === workshopId ? { ...x, seatsTaken: Math.max(0, x.seatsTaken - 1) } : x)),
+            enrollments: d.enrollments.filter((x) => x.id !== enrollmentId),
+            notifications: [{ id: uid("n"), userId: e.userId, type: "workshop" as const, actorId: meId!, key: "bookingRemoved", params: { title: d.workshops.find((w) => w.id === s.workshopId)?.title ?? "" }, href: `/learn/workshop/${s.workshopId}`, at: now(), read: false }, ...d.notifications],
           };
         });
       },
@@ -570,9 +714,12 @@ function useBuildStore() {
         });
       },
 
-      /* ---------- host: workshops & events ---------- */
-      /** Saves a draft, publishes, or edits. Significant edits of a published event notify its audience once per person. */
-      saveWorkshop(input: WorkshopInput, opts: { id?: string; publish: boolean }): { id: string; notified: number } | { error: "forbidden" | "not_found" } {
+      /* ---------- host: workshop templates & sessions ---------- */
+      /**
+       * Saves a template. Published sessions keep their own copy of price/terms/venue:
+       * `applyMode` decides whether changes also reach future sessions (see lib/workshops).
+       */
+      saveWorkshop(input: WorkshopInput, opts: { id?: string; publish?: boolean; applyMode?: ApplyMode }): { id: string; updatedSessions: number; notified: number } | { error: "forbidden" | "not_found" } {
         const snap = stateRef.current;
         if (!meId || !snap) return { error: "forbidden" };
         const existing = opts.id ? snap.data.workshops.find((w) => w.id === opts.id) : undefined;
@@ -581,56 +728,141 @@ function useBuildStore() {
         const at = now();
         const id = existing?.id ?? uid("w");
         const author = snap.data.users.find((u) => u.id === meId);
-        const status: Workshop["status"] = opts.publish ? "published" : existing?.status === "published" ? "published" : "draft";
-        const next: Workshop = {
-          ...(existing ?? { seatsTaken: 0, createdAt: at, lang: author?.contentLang ?? "ru" }),
-          ...input,
-          id,
-          hostId: meId,
-          status,
-          durationMin: durationMin(input),
-          updatedAt: at,
-        } as Workshop;
+        const status: Workshop["status"] = opts.publish ? "published" : existing?.status ?? "draft";
+        const next: Workshop = { ...(existing ?? { createdAt: at, lang: author?.contentLang ?? "ru" }), ...input, id, hostId: meId, status, updatedAt: at } as Workshop;
+        let sessions = snap.data.sessions;
         let notes: AppNotification[] = [];
-        if (existing?.status === "published" && status === "published") {
-          const changes = significantChanges(existing, next);
-          if (changes.length) {
-            notes = eventAudience(snap.data, next).map((userId) => ({
-              id: uid("n"),
-              userId,
-              type: "workshop" as const,
-              actorId: meId,
-              key: "eventChanged",
-              params: { title: next.title },
-              href: `/learn/workshop/${id}`,
-              changes,
-              at,
-              read: false,
-            }));
+        let updatedSessions = 0;
+        if (existing && opts.applyMode && opts.applyMode !== "new") {
+          const diff = templateDiffForSessions(existing, next);
+          if (diff.price || diff.terms || diff.place) {
+            sessions = sessions.map((s) => {
+              if (s.workshopId !== id || s.status !== "scheduled" || new Date(s.startsAt).getTime() <= Date.now()) return s;
+              const booked = snap.data.enrollments.some((e) => e.sessionId === s.id);
+              if (opts.applyMode === "empty" && booked) return s;
+              const ns = { ...applyTemplateToSession(s, next, diff), updatedAt: at };
+              const changes = significantChanges(s, ns);
+              if (!changes.length) return s;
+              updatedSessions += 1;
+              notes = notes.concat(
+                sessionAudience(snap.data, s).map((userId) => ({
+                  id: uid("n"), userId, type: "workshop" as const, actorId: meId, key: "sessionChanged", params: { title: next.title }, href: `/learn/workshop/${id}?session=${s.id}`, changes, at, read: false,
+                })),
+              );
+              return ns;
+            });
           }
         }
         update((d) => ({
           workshops: existing ? d.workshops.map((w) => (w.id === id ? next : w)) : [next, ...d.workshops],
+          sessions,
+          notifications: [...notes, ...d.notifications.filter((n) => !notes.some((x) => x.id === n.id))],
+        }));
+        return { id, updatedSessions, notified: notes.length };
+      },
+      archiveWorkshop(id: string, archived: boolean) {
+        update((d) => ({ workshops: d.workshops.map((w) => (w.id === id && w.hostId === meId && w.status !== "draft" ? { ...w, status: archived ? "archived" : "published", updatedAt: now() } : w)) }));
+      },
+      deleteWorkshopDraft(id: string) {
+        update((d) => {
+          const w = d.workshops.find((x) => x.id === id);
+          if (!w || w.hostId !== meId || w.status !== "draft") return;
+          return { workshops: d.workshops.filter((x) => x.id !== id), sessions: d.sessions.filter((s) => s.workshopId !== id) };
+        });
+      },
+      /** Adds or edits one session. Significant edits notify the people booked on that session (once each). */
+      saveSession(workshopId: string, input: SessionInput, sessionId?: string): { id: string; notified: number } | { error: "forbidden" | "not_found" | "seats" } {
+        const snap = stateRef.current;
+        const w = snap?.data.workshops.find((x) => x.id === workshopId);
+        if (!meId || !snap || !w) return { error: "not_found" };
+        if (w.hostId !== meId) return { error: "forbidden" };
+        const existing = sessionId ? snap.data.sessions.find((s) => s.id === sessionId && s.workshopId === workshopId) : undefined;
+        if (sessionId && !existing) return { error: "not_found" };
+        if (existing?.status === "cancelled") return { error: "forbidden" };
+        if (existing) {
+          const taken = (existing.externalSeats ?? 0) + snap.data.enrollments.filter((e) => e.sessionId === existing.id).reduce((n, e) => n + e.seats, 0);
+          if (input.seatsTotal < taken) return { error: "seats" };
+        }
+        const at = now();
+        const id = existing?.id ?? uid("s");
+        const next: WorkshopSession = {
+          ...(existing ?? { createdAt: at, externalSeats: 0, status: "scheduled" as const }),
+          ...input,
+          id,
+          workshopId,
+          hostId: meId,
+          updatedAt: at,
+        } as WorkshopSession;
+        let notes: AppNotification[] = [];
+        if (existing) {
+          const changes = significantChanges(existing, next);
+          if (changes.length)
+            notes = sessionAudience(snap.data, existing).map((userId) => ({
+              id: uid("n"), userId, type: "workshop" as const, actorId: meId, key: "sessionChanged", params: { title: w.title }, href: `/learn/workshop/${w.id}?session=${id}`, changes, at, read: false,
+            }));
+        }
+        update((d) => ({
+          sessions: existing ? d.sessions.map((s) => (s.id === id ? next : s)) : [...d.sessions, next],
           notifications: [...notes, ...d.notifications.filter((n) => !notes.some((x) => x.id === n.id))],
         }));
         return { id, notified: notes.length };
       },
-      cancelWorkshop(id: string): number {
+      /** Cancels one session (the workshop and its other dates stay). Booked participants are notified. */
+      cancelSession(sessionId: string): number {
         const snap = stateRef.current;
-        const w = snap?.data.workshops.find((x) => x.id === id);
-        if (!meId || !snap || !w || w.hostId !== meId || w.status !== "published") return 0;
+        const s = snap?.data.sessions.find((x) => x.id === sessionId);
+        const w = s && snap!.data.workshops.find((x) => x.id === s.workshopId);
+        if (!meId || !snap || !s || !w || s.hostId !== meId || s.status !== "scheduled") return 0;
         const at = now();
-        const notes: AppNotification[] = eventAudience(snap.data, w).map((userId) => ({
-          id: uid("n"), userId, type: "workshop" as const, actorId: meId, key: "eventCancelled", params: { title: w.title }, href: `/learn/workshop/${id}`, at, read: false,
+        const notes: AppNotification[] = sessionAudience(snap.data, s).map((userId) => ({
+          id: uid("n"), userId, type: "workshop" as const, actorId: meId, key: "sessionCancelled", params: { title: w.title, startsAt: s.startsAt }, href: `/learn/workshop/${w.id}`, at, read: false,
         }));
         update((d) => ({
-          workshops: d.workshops.map((x) => (x.id === id ? { ...x, status: "cancelled" as const, cancelledAt: at, updatedAt: at } : x)),
+          sessions: d.sessions.map((x) => (x.id === sessionId ? { ...x, status: "cancelled" as const, cancelledAt: at, updatedAt: at } : x)),
           notifications: [...notes, ...d.notifications.filter((n) => !notes.some((x) => x.id === n.id))],
         }));
         return notes.length;
       },
-      deleteWorkshopDraft(id: string) {
-        update((d) => ({ workshops: d.workshops.filter((w) => !(w.id === id && w.hostId === meId && w.status === "draft")) }));
+
+      /* ---------- authors: tutorials ---------- */
+      saveTutorial(input: TutorialInput, opts: { id?: string; status: Tutorial["status"] }): { id: string } | { error: "forbidden" | "not_found" } {
+        const snap = stateRef.current;
+        if (!meId || !snap) return { error: "forbidden" };
+        const existing = opts.id ? snap.data.tutorials.find((x) => x.id === opts.id) : undefined;
+        if (opts.id && !existing) return { error: "not_found" };
+        if (existing && existing.authorId !== meId) return { error: "forbidden" };
+        const at = now();
+        const id = existing?.id ?? uid("t");
+        const author = snap.data.users.find((u) => u.id === meId);
+        const tut: Tutorial = {
+          ...(existing ?? { createdAt: at, reviews: [], views: 0, lang: author?.contentLang ?? "ru" }),
+          ...input,
+          format: input.videoUrl ? "video" : "steps",
+          id,
+          authorId: meId,
+          status: opts.status,
+          updatedAt: at,
+        } as Tutorial;
+        update((d) => ({ tutorials: existing ? d.tutorials.map((x) => (x.id === id ? tut : x)) : [tut, ...d.tutorials] }));
+        return { id };
+      },
+      setTutorialStatus(id: string, status: Tutorial["status"]) {
+        update((d) => ({ tutorials: d.tutorials.map((x) => (x.id === id && x.authorId === meId ? { ...x, status, updatedAt: now() } : x)) }));
+      },
+      deleteTutorial(id: string) {
+        update((d) => {
+          const tu = d.tutorials.find((x) => x.id === id);
+          if (!tu || tu.authorId !== meId) return;
+          // Purchases stay as payment records; the material itself and saves are removed.
+          return { tutorials: d.tutorials.filter((x) => x.id !== id), favorites: d.favorites.filter((f) => !(f.type === "tutorial" && f.id === id)) };
+        });
+      },
+      viewTutorial(id: string) {
+        update((d) => {
+          const tu = d.tutorials.find((x) => x.id === id);
+          if (!tu || tu.authorId === meId || tu.status !== "published") return;
+          return { tutorials: d.tutorials.map((x) => (x.id === id ? { ...x, views: (x.views ?? 0) + 1 } : x)) };
+        });
       },
       deleteIdea(ideaId: string) {
         update((d) => ({ ideas: d.ideas.filter((i) => i.id !== ideaId) }));
@@ -651,7 +883,9 @@ function useBuildStore() {
 }
 
 export type ProductInput = Omit<Product, "id" | "sellerId" | "availability" | "status" | "createdAt" | "updatedAt" | "views" | "lang" | "story"> & { story?: string };
-export type WorkshopInput = Omit<Workshop, "id" | "hostId" | "status" | "seatsTaken" | "createdAt" | "updatedAt" | "durationMin" | "lang" | "cancelledAt">;
+export type WorkshopInput = Omit<Workshop, "id" | "hostId" | "status" | "createdAt" | "updatedAt" | "lang">;
+export type SessionInput = Omit<WorkshopSession, "id" | "workshopId" | "hostId" | "status" | "createdAt" | "updatedAt" | "cancelledAt" | "externalSeats">;
+export type TutorialInput = Omit<Tutorial, "id" | "authorId" | "status" | "createdAt" | "updatedAt" | "views" | "lang" | "reviews" | "format">;
 
 /** Upgrades a v3 demo database in place: keeps every user change, fills new fields, adds new demo records. */
 function migrateV3(old: AppState): AppState {
@@ -668,15 +902,8 @@ function migrateV3(old: AppState): AppState {
     saleType: p.saleType ?? (p.availability === "made_to_order" ? "to_order" : "ready"),
     technique: p.technique ?? techOf.get(p.id),
   })) as Product[];
-  const workshops = d.workshops.map((w) => ({
-    ...w,
-    kind: w.kind ?? (w.id === "w6" ? "event" : "workshop"),
-    status: w.status ?? "published",
-    endsAt: w.endsAt ?? new Date(new Date(w.startsAt).getTime() + w.durationMin * 60000).toISOString(),
-    createdAt: w.createdAt ?? w.startsAt,
-    updatedAt: w.updatedAt ?? w.startsAt,
-    level: w.level ?? "any",
-  })) as Workshop[];
+  // Workshops stay in the old one-date shape here; migrateV4 splits them into templates + sessions.
+  const workshops = (d.workshops as unknown as LegacyWorkshop[]).map((w) => ({ ...w, status: w.status ?? "published" }));
   const addMissing = <T extends { id: string }>(list: T[], extra: T[]) => [...list, ...extra.filter((x) => !list.some((y) => y.id === x.id))];
   let projects: Project[] = d.projects ?? [];
   const ideas = d.ideas.map((i) => {
@@ -689,15 +916,56 @@ function migrateV3(old: AppState): AppState {
   });
   return {
     ...old,
-    version: 4,
+    version: 4 as unknown as 5, // intermediate step, finished by migrateV4
     data: {
       ...d,
       posts: d.posts.map((p) => ({ ...p, technique: p.technique ?? techOf.get(p.id) })),
       tutorials: d.tutorials.map((x) => ({ ...x, technique: x.technique ?? techOf.get(x.id), format: x.format ?? "steps" })),
       products: addMissing(products, fresh.products.filter((p) => p.id === "pr17")),
-      workshops: addMissing(workshops, fresh.workshops.filter((w) => w.id === "w7" || w.id === "w8")),
+      workshops: workshops as unknown as Workshop[],
       projects: addMissing(projects, fresh.projects),
       ideas,
+    },
+  };
+}
+
+/**
+ * v4 → v5: one-date workshops (and former "events") become templates with one session each;
+ * bookings are attached to that session. Nothing is deleted: cancelled ones keep their
+ * cancelled session, drafts stay drafts. Tutorials get an authoring status.
+ */
+function migrateV4(old: AppState): AppState {
+  const fresh = buildSeed();
+  const d = old.data as SeedData & { sessions?: WorkshopSession[] };
+  if (d.sessions) return { ...old, version: 5 };
+  const legacy = d.workshops as unknown as LegacyWorkshop[];
+  const legacyEnrollments = d.enrollments as unknown as { userId: string; workshopId: string; at: string }[];
+  const enrollments = legacyEnrollments.map(legacyEnrollment);
+  const workshops: Workshop[] = [];
+  const sessions: WorkshopSession[] = [];
+  for (const lw of legacy) {
+    const { template, session } = splitLegacy(lw, enrollments.filter((e) => e.workshopId === lw.id).length);
+    workshops.push(template);
+    sessions.push(session);
+  }
+  // Extra demo dates for seeded templates that exist in this database.
+  for (const s of fresh.sessions.filter((x) => !x.id.endsWith("_s1"))) {
+    if (workshops.some((w) => w.id === s.workshopId)) sessions.push(s);
+  }
+  const extraBookings = fresh.enrollments.filter((e) => sessions.some((s) => s.id === e.sessionId) && !enrollments.some((x) => x.id === e.id) && !e.sessionId.endsWith("_s1"));
+  const tutorials = d.tutorials.map((x) => ({ ...x, status: x.status ?? "published", views: x.views ?? fresh.tutorials.find((f) => f.id === x.id)?.views ?? 0 })) as Tutorial[];
+  const draft = fresh.tutorials.find((x) => x.id === "t10");
+  return {
+    ...old,
+    version: 5,
+    data: {
+      ...d,
+      workshops,
+      sessions,
+      enrollments: [...enrollments, ...extraBookings],
+      tutorials: draft && !tutorials.some((x) => x.id === "t10") ? [...tutorials, draft] : tutorials,
+      reminderLog: d.reminderLog ?? [],
+      // Notifications about former events keep working: their links point at the same template id.
     },
   };
 }

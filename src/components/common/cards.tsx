@@ -4,12 +4,12 @@ import Image from "next/image";
 import { Clock, MapPin, MonitorPlay, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
-import type { Product, Tutorial, Workshop } from "@/lib/types";
+import type { Product, Tutorial, Workshop, WorkshopSession } from "@/lib/types";
 import { rating, userById, canShipTo } from "@/lib/selectors";
 import { Badge, Stars } from "@/components/ui/primitives";
 import { SaveButton } from "./actions";
 import { cn } from "@/lib/utils";
-import { workshopPhase } from "@/lib/workshops";
+import { nextSession, seatsLeft, sessionPhase, upcomingSessions } from "@/lib/workshops";
 
 export function Price({ value, className }: { value: Product["price"]; className?: string }) {
   const { money, settings } = { ...useI18n(), settings: useStore().settings };
@@ -100,21 +100,27 @@ export function TutorialCard({ tut }: { tut: Tutorial }) {
   );
 }
 
-export function WorkshopCard({ w, enrolled }: { w: Workshop; enrolled?: boolean }) {
+/** Workshop template card: shows the nearest scheduled session (date, seats) if there is one. */
+export function WorkshopCard({ w, enrolled, session }: { w: Workshop; enrolled?: boolean; session?: WorkshopSession }) {
   const { state } = useStore();
   const { t, money, date } = useI18n();
-  const host = userById(state!.data, w.hostId);
-  const left = w.seatsTotal - w.seatsTaken;
-  const phase = workshopPhase(w);
-  const past = phase === "published" && new Date(w.startsAt).getTime() < Date.now();
+  const d = state!.data;
+  const host = userById(d, w.hostId);
+  const s = session ?? nextSession(d, w.id);
+  const phase = s ? sessionPhase(s) : null;
+  const left = s ? seatsLeft(d, s) : 0;
+  const more = upcomingSessions(d, w.id).length - (s && phase === "upcoming" ? 1 : 0);
+  const price = s?.price !== undefined ? s.price : w.price;
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-[var(--radius-tile)] border border-line bg-surface shadow-[var(--shadow-tile)] sm:flex-row">
-      <Link href={`/learn/workshop/${w.id}`} className="relative block aspect-[16/10] shrink-0 overflow-hidden bg-line/40 sm:aspect-auto sm:w-56">
-        <Image src={w.cover} alt={w.title} fill sizes="(max-width: 640px) 100vw, 224px" className="object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
-        <div className="absolute start-2 top-2 rounded-xl bg-white/95 px-2.5 py-1.5 text-center shadow-sm">
-          <p className="text-[11px] font-bold uppercase text-rose-deep">{date(w.startsAt, "weekday").split(",")[0]}</p>
-          <p className="nums text-sm font-bold leading-tight text-ink">{date(w.startsAt, "medium")}</p>
-        </div>
+      <Link href={`/learn/workshop/${w.id}${s ? `?session=${s.id}` : ""}`} className="relative block aspect-[16/10] shrink-0 overflow-hidden bg-line/40 sm:aspect-auto sm:w-56">
+        <Image src={w.cover} alt={w.title} fill sizes="(max-width: 640px) 100vw, 224px" unoptimized={w.cover.startsWith("data:")} className="object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
+        {s && (
+          <div className="absolute start-2 top-2 rounded-xl bg-white/95 px-2.5 py-1.5 text-center shadow-sm">
+            <p className="text-[11px] font-bold uppercase text-rose-deep">{date(s.startsAt, "weekday").split(",")[0]}</p>
+            <p className="nums text-sm font-bold leading-tight text-ink">{date(s.startsAt, "medium")}</p>
+          </div>
+        )}
       </Link>
       <SaveButton type="workshop" id={w.id} variant="glass" className="absolute end-2 top-2" />
       <div className="flex min-w-0 flex-1 flex-col p-4">
@@ -122,25 +128,33 @@ export function WorkshopCard({ w, enrolled }: { w: Workshop; enrolled?: boolean 
           <Badge tone={w.format === "online" ? "info" : "rust"}>
             {w.format === "online" ? <MonitorPlay className="size-3" /> : <MapPin className="size-3" />}
             {t(`workshop.${w.format}`)}
-            {w.city ? ` · ${w.city}` : ""}
+            {w.format === "offline" && (s?.city ?? w.city) ? ` · ${s?.city ?? w.city}` : ""}
           </Badge>
-          {w.kind === "event" && <Badge tone="warn">{t("ev.kind.event")}</Badge>}
           {enrolled && phase !== "cancelled" && <Badge tone="success">{t("workshop.enrolled")}</Badge>}
-          {phase !== "published" && <Badge tone={phase === "cancelled" ? "danger" : "neutral"}>{t(`ev.phase.${phase}`)}</Badge>}
-          {past && <Badge>{t("workshop.past")}</Badge>}
+          {phase && phase !== "upcoming" && <Badge tone={phase === "cancelled" ? "danger" : "neutral"}>{t(`ws.phase.${phase}`)}</Badge>}
+          {w.status === "archived" && <Badge>{t("ws.status.archived")}</Badge>}
         </div>
         <Link href={`/learn/workshop/${w.id}`} className="line-clamp-2 font-bold leading-snug text-ink hover:underline" lang={w.lang}>
           {w.title}
         </Link>
         {host && <p className="mt-0.5 truncate text-xs text-muted">{t("workshop.host", { name: host.name })}</p>}
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3">
-          <span className="nums text-[15px] font-bold text-ink">{w.price ? money(w.price) : t("learn.free")}</span>
-          <span className={cn("inline-flex items-center gap-1 text-xs font-semibold", left <= 0 ? "text-rose-deep" : left <= 3 ? "text-rust" : "text-muted")}>
-            <Users className="size-3.5" />
-            {left <= 0 ? t("workshop.full") : t("workshop.seatsLeft", { count: left })}
-          </span>
+          <span className="nums text-[15px] font-bold text-ink">{price ? money(price) : t("learn.free")}</span>
+          {s && phase === "upcoming" ? (
+            <span className={cn("inline-flex items-center gap-1 text-xs font-semibold", left <= 0 ? "text-rose-deep" : left <= 3 ? "text-rust" : "text-muted")}>
+              <Users className="size-3.5" />
+              {left <= 0 ? t("workshop.full") : t("workshop.seatsLeft", { count: left })}
+            </span>
+          ) : !s ? (
+            <span className="text-xs font-semibold text-muted">{t("ws.noDates")}</span>
+          ) : null}
         </div>
-        <p className="mt-1 text-xs text-faint">{date(w.startsAt, "time")} · {t("workshop.yourTime")}</p>
+        {s && (
+          <p className="mt-1 text-xs text-faint">
+            {date(s.startsAt, "time")} · {t("workshop.yourTime")}
+            {more > 0 && <> · {t("ws.moreDates", { count: more })}</>}
+          </p>
+        )}
       </div>
     </article>
   );

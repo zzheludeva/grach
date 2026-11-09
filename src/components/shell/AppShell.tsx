@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
-import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays } from "lucide-react";
+import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays, BookOpen } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { MAIN_NAV, USER_NAV } from "./nav";
@@ -130,7 +130,8 @@ function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; 
           <div className="my-1 h-px bg-line" />
           <MenuItem icon={<FolderKanban />} onClick={() => go(`/dashboard/projects`, close)}>{t("nav.myProjects")}</MenuItem>
           <MenuItem icon={<Store />} onClick={() => go(`/dashboard/products`, close)}>{t("nav.myProducts")}</MenuItem>
-          <MenuItem icon={<CalendarDays />} onClick={() => go(`/dashboard/events`, close)}>{t("nav.myEvents")}</MenuItem>
+          <MenuItem icon={<CalendarDays />} onClick={() => go(`/dashboard/workshops`, close)}>{t("nav.myWorkshops")}</MenuItem>
+          <MenuItem icon={<BookOpen />} onClick={() => go(`/dashboard/tutorials`, close)}>{t("nav.myTutorials")}</MenuItem>
           <div className="md:hidden">
             <div className="my-1 h-px bg-line" />
             <MenuItem icon={<Bookmark />} onClick={() => go(`/favorites`, close)}>{t("nav.favorites")}</MenuItem>
