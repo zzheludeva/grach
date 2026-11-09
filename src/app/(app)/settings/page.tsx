@@ -25,7 +25,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 xl:grid-cols-[1fr_320px] [&>*]:min-w-0">
         <Card className="p-5 sm:p-6">
           <SectionTitle>{t("settings.regional")}</SectionTitle>
           <RegionFields

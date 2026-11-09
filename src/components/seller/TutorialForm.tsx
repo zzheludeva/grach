@@ -1,4 +1,5 @@
 "use client";
+import { BackLink } from "@/components/common/BackLink";
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -20,7 +21,8 @@ const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 const isUrl = (u: string) => /^https?:\/\/\S+\.\S+/.test(u.trim());
 
 /** Authoring form for a learning material (draft → preview → publish; edit later). */
-export function TutorialForm({ tutorial }: { tutorial?: Tutorial }) {
+/** One form for creating and editing a tutorial — used from the author dashboard and from Learning. */
+export function TutorialForm({ tutorial, origin = "dashboard" }: { tutorial?: Tutorial; origin?: "dashboard" | "learn" }) {
   const { t, cat, locale } = useI18n();
   const { settings, actions } = useStore();
   const router = useRouter();
@@ -86,7 +88,7 @@ export function TutorialForm({ tutorial }: { tutorial?: Tutorial }) {
     const res = actions.saveTutorial(build(), { id: tutorial?.id, status: next });
     if ("error" in res) return toast({ text: res.error === "forbidden" ? t("common.forbidden") : t("errors.notFound"), tone: "error" });
     toast({ text: next === "draft" ? t("tut.toast.draft") : next === "hidden" ? t("tut.toast.saved") : status === "published" ? t("tut.toast.saved") : t("tut.toast.published") });
-    router.push(next === "published" ? `/learn/tutorial/${res.id}` : "/dashboard/tutorials");
+    router.replace(next === "published" ? `/learn/tutorial/${res.id}` : "/dashboard/tutorials");
   };
 
   const setStep = (i: number, patch: Partial<Step>) => setSteps(steps.map((s, k) => (k === i ? { ...s, ...patch } : s)));
@@ -101,6 +103,7 @@ export function TutorialForm({ tutorial }: { tutorial?: Tutorial }) {
 
   return (
     <div className="mx-auto max-w-3xl">
+      <BackLink fallback={origin === "learn" ? "/learn" : "/dashboard/tutorials"} fallbackLabel={origin === "learn" ? t("nav.learn") : t("nav.myTutorials")} className="mb-2" />
       <PageHeader
         title={tutorial ? t("tut.form.editTitle") : t("tut.form.newTitle")}
         subtitle={t("tut.form.subtitle")}

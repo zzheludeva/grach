@@ -38,7 +38,7 @@ export default function CartPage() {
           <span>{t("cart.checkItems", { count: issues })}</span>
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px] [&>*]:min-w-0">
         <div className="space-y-5">
           {groups.length > 1 && (
             <p className="flex items-start gap-2 text-sm text-muted">

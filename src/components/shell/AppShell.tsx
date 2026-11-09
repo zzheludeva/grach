@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useContext, useEffect, useState } from "react";
-import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays, BookOpen } from "lucide-react";
+import { createContext, Suspense, useContext, useEffect, useState } from "react";
+import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays, BookOpen, Check, Settings as SettingsIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { MAIN_NAV, USER_NAV } from "./nav";
@@ -14,6 +14,9 @@ import { cartCount, unreadCount } from "@/lib/selectors";
 import { cn } from "@/lib/utils";
 import { Composer } from "@/components/feed/Composer";
 import { LangSuggestion } from "./LangSuggestion";
+import { NavTracker } from "@/lib/nav-history";
+import { LOCALES, LOCALE_NAMES } from "@/i18n/config";
+import type { Locale } from "@/lib/types";
 
 const ShellCtx = createContext<{ openComposer: (prefill?: { title?: string; body?: string }) => void }>({ openComposer: () => {} });
 export const useShell = () => useContext(ShellCtx);
@@ -32,6 +35,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ShellCtx.Provider value={{ openComposer: (prefill) => setComposer({ open: true, prefill }) }}>
+      <Suspense fallback={null}>
+        <NavTracker />
+      </Suspense>
       <div className="min-h-dvh">
         <TopBar onCompose={() => setComposer({ open: true })} />
         <main className="mx-auto w-full max-w-[1240px] px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-6">
@@ -89,7 +95,7 @@ function SectionTabs() {
 }
 
 function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; full?: boolean }) {
-  const { t, langName } = useI18n();
+  const { t } = useI18n();
   const { me, actions } = useStore();
   const router = useRouter();
   if (!me) return null;
@@ -139,11 +145,60 @@ function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; 
             <MenuItem icon={<MessageCircle />} onClick={() => go(`/messages`, close)}>{t("nav.messages")}</MenuItem>
           </div>
           <div className="my-1 h-px bg-line" />
-          <MenuItem icon={<Languages />} onClick={() => go(`/settings`, close)} trailing={<span className="text-xs text-faint">{langName(t("meta.code"))}</span>}>
+          <MenuItem icon={<SettingsIcon />} onClick={() => go(`/settings`, close)}>
             {t("nav.settings")}
           </MenuItem>
           <MenuItem icon={<Repeat />} onClick={() => { close(); actions.logout(); router.push("/welcome"); }}>{t("nav.switchAccount")}</MenuItem>
           <MenuItem icon={<LogOut />} onClick={() => { close(); actions.logout(); router.push("/welcome"); }}>{t("nav.logout")}</MenuItem>
+        </>
+      )}
+    </Dropdown>
+  );
+}
+
+const SHORT: Record<Locale, string> = { ru: "RU", en: "EN", "pt-BR": "PT", es: "ES" };
+
+/**
+ * Compact language switcher in the header. Switches the interface in place: same page, same URL (filters and
+ * queries live in the URL), same component state. Saved per account and per device; the country is not changed.
+ */
+function LanguageSwitcher() {
+  const { t, locale } = useI18n();
+  const { actions } = useStore();
+  return (
+    <Dropdown
+      align="end"
+      className="w-60"
+      trigger={(p) => (
+        <button
+          {...p}
+          aria-label={t("nav2.language", { lang: LOCALE_NAMES[locale] })}
+          title={t("nav2.languageTitle")}
+          className="inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl px-2 text-[13px] font-bold text-ink hover:bg-ink-soft/70"
+        >
+          <Languages className="size-[18px]" />
+          <span className="hidden sm:inline">{SHORT[locale]}</span>
+        </button>
+      )}
+    >
+      {(close) => (
+        <>
+          <p className="px-3 pb-1.5 pt-1 text-xs font-semibold text-muted">{t("nav2.languageTitle")}</p>
+          {LOCALES.map((l) => (
+            <MenuItem
+              key={l}
+              className="min-h-11"
+              onClick={() => {
+                close();
+                if (l === locale) return;
+                actions.updateSettings({ lang: l });
+                actions.setDeviceLang(l);
+              }}
+              trailing={l === locale ? <Check className="size-4 text-teal" /> : <span className="text-[11px] font-bold text-faint">{SHORT[l]}</span>}
+            >
+              <span lang={l}>{LOCALE_NAMES[l]}</span>
+            </MenuItem>
+          ))}
         </>
       )}
     </Dropdown>
@@ -222,6 +277,7 @@ function TopBar({ onCompose }: { onCompose: () => void }) {
               );
             })}
           </nav>
+          <LanguageSwitcher />
           <div className="ms-1">
             <UserMenu />
           </div>

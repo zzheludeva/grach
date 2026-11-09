@@ -115,7 +115,7 @@ export default function Checkout() {
           </li>
         ))}
       </ol>
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">
         <Card className="p-5 sm:p-6">
           {step === 0 && (
             <div className="space-y-4">

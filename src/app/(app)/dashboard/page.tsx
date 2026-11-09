@@ -9,9 +9,9 @@ import { authorAnalytics } from "@/lib/analytics";
 import { Badge, Card, DemoNote, EmptyState, PageHeader, SectionTitle, Tabs } from "@/components/ui/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { FollowersChart, IncomeChart, SERIES } from "@/components/dashboard/Charts";
-import { STATUS_TONE, sellerNext, pendingAck } from "@/lib/orders";
+import { STATUS_TONE, sellerNext, pendingReady, nextStep, bucketOf } from "@/lib/orders";
 import { nextSession, seatsTaken } from "@/lib/workshops";
-import { statusLabelKey } from "@/components/common/OrderStatusBadge";
+import { orderLabelKey } from "@/components/common/OrderStatusBadge";
 import { userById } from "@/lib/selectors";
 import { useShell } from "@/components/shell/AppShell";
 import { useToast } from "@/components/ui/toast";
@@ -47,6 +47,9 @@ export default function Dashboard() {
     else if (tip) r.push({ title: t("dashboard.rec.wsTitle"), text: t("dashboard.rec.wsTextTip", { title: tip.p.title }), basis: t("dashboard.rec.wsBasis") });
     return r;
   }, [a, d, t, cat]);
+
+  // Orders that still need work (completed and cancelled ones are in "Sales").
+  const activeOrders = a.incoming.filter((o) => bucketOf(o.status) === "active");
 
   const kpis = [
     { icon: Coins, label: t("dashboard.kIncome"), value: money({ amount: a.income.total, currency }), hint: t("dashboard.forPeriod") },
@@ -118,7 +121,7 @@ export default function Dashboard() {
       </div>
       {a.otherCurrencySales > 0 && <p className="-mt-3 mb-5 text-xs text-faint">{t("dashboard.otherCurrency", { count: a.otherCurrencySales, currency })}</p>}
 
-      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr] [&>*]:min-w-0">
         <Card className="p-5">
           <SectionTitle
             action={
@@ -172,33 +175,42 @@ export default function Dashboard() {
           <p className="mt-2 text-xs text-faint">{t("dashboard.chartNote", { currency })}</p>
         </Card>
 
-        <Card className="p-5">
-          <SectionTitle>
-            <span className="inline-flex items-center gap-2">{t("dashboard.recsTitle")}</span>
-          </SectionTitle>
-          <p className="mb-3 flex items-start gap-1.5 text-xs text-muted">
-            <Info className="mt-0.5 size-3.5 shrink-0" /> {t("dashboard.recsNote")}
-          </p>
-          {recs.length === 0 ? (
-            <p className="text-sm text-muted">{t("dashboard.recsEmpty")}</p>
+        <Card className="p-4 sm:p-5">
+          <SectionTitle action={<ButtonLink href="/orders?role=seller" variant="ghost" size="sm">{t("nav2.allSales")}</ButtonLink>}>{t("dashboard.incoming")}</SectionTitle>
+          {activeOrders.length === 0 ? (
+            <p className="text-sm text-muted">{t("dashboard.noIncoming")}</p>
           ) : (
-            <ul className="space-y-2.5">
-              {recs.map((r, i) => (
-                <li key={i} className="rounded-xl border border-line bg-bg/50 p-3">
-                  <p className="flex items-start gap-2 text-sm font-bold text-ink">
-                    <Lightbulb className="mt-0.5 size-4 shrink-0 text-saffron" />
-                    {r.href ? <Link href={r.href} className="hover:underline">{r.title}</Link> : r.title}
-                  </p>
-                  <p className="mt-1 ps-6 text-[13px] text-text/85">{r.text}</p>
-                  <p className="mt-1 ps-6 text-[11px] text-faint">{r.basis}</p>
-                </li>
-              ))}
+            <ul className="divide-y divide-line">
+              {[...activeOrders].sort((x, y) => Number(nextStep(y).who === "seller") - Number(nextStep(x).who === "seller")).slice(0, 6).map((o) => {
+                const buyer = userById(d, o.buyerId);
+                const n = sellerNext(o);
+                const waiting = pendingReady(o);
+                return (
+                  <li key={o.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                    <div className="min-w-0 flex-1 basis-48">
+                      <p className="nums text-sm font-bold text-ink">
+                        {o.number} <span className="font-normal text-muted">· {buyer?.name}</span>
+                      </p>
+                      <p className="truncate text-xs text-muted">
+                        {o.items.map((i) => `${i.title} ×${i.qty}`).join(", ")} · {relative(o.createdAt)}
+                      </p>
+                    </div>
+                    <span className="nums text-sm font-semibold">{money(o.total)}</span>
+                    <Badge tone={STATUS_TONE[o.status]}>{t(orderLabelKey(o))}</Badge>
+                    {waiting && <Badge tone="warn">{t("ord.awaitingBuyer")}</Badge>}
+                    {/* Steps with proof (photos, tracking) are done on the order page. */}
+                    <ButtonLink href={`/orders/${o.id}`} size="sm" variant={n ? "soft" : "ghost"}>
+                      {n ? <FastForward className="size-3.5" /> : null} {n ? (n === "ready" ? t("ordx.action.ready") : t(`ord.action.${n}`)) : t("ord.open")}
+                    </ButtonLink>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
         <Card className="p-5">
           <SectionTitle>{t("dashboard.salesTitle")}</SectionTitle>
           {a.productStats.length === 0 ? (
@@ -262,37 +274,28 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
         <Card className="p-5">
-          <SectionTitle>{t("dashboard.incoming")}</SectionTitle>
-          {a.incoming.length === 0 ? (
-            <p className="text-sm text-muted">{t("dashboard.noIncoming")}</p>
+          <SectionTitle>
+            <span className="inline-flex items-center gap-2">{t("dashboard.recsTitle")}</span>
+          </SectionTitle>
+          <p className="mb-3 flex items-start gap-1.5 text-xs text-muted">
+            <Info className="mt-0.5 size-3.5 shrink-0" /> {t("dashboard.recsNote")}
+          </p>
+          {recs.length === 0 ? (
+            <p className="text-sm text-muted">{t("dashboard.recsEmpty")}</p>
           ) : (
-            <ul className="divide-y divide-line">
-              {a.incoming.slice(0, 6).map((o) => {
-                const buyer = userById(d, o.buyerId);
-                const n = sellerNext(o.status);
-                const waiting = pendingAck(o);
-                return (
-                  <li key={o.id} className="flex flex-wrap items-center gap-2 py-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="nums text-sm font-bold text-ink">
-                        {o.number} <span className="font-normal text-muted">· {buyer?.name}</span>
-                      </p>
-                      <p className="truncate text-xs text-muted">
-                        {o.items.map((i) => `${i.title} ×${i.qty}`).join(", ")} · {relative(o.createdAt)}
-                      </p>
-                    </div>
-                    <span className="nums text-sm font-semibold">{money(o.total)}</span>
-                    <Badge tone={STATUS_TONE[o.status]}>{t(statusLabelKey(o.status, o.deliveryMethod))}</Badge>
-                    {waiting && <Badge tone="warn">{t("ord.awaitingBuyer")}</Badge>}
-                    {/* Every step needs its own confirmation (photo, tracking) — done on the order page. */}
-                    <ButtonLink href={`/orders/${o.id}`} size="sm" variant={n ? "soft" : "ghost"}>
-                      {n ? <FastForward className="size-3.5" /> : null} {n ? t(`ord.action.${n}`) : t("ord.open")}
-                    </ButtonLink>
-                  </li>
-                );
-              })}
+            <ul className="space-y-2.5">
+              {recs.map((r, i) => (
+                <li key={i} className="rounded-xl border border-line bg-bg/50 p-3">
+                  <p className="flex items-start gap-2 text-sm font-bold text-ink">
+                    <Lightbulb className="mt-0.5 size-4 shrink-0 text-saffron" />
+                    {r.href ? <Link href={r.href} className="hover:underline">{r.title}</Link> : r.title}
+                  </p>
+                  <p className="mt-1 ps-6 text-[13px] text-text/85">{r.text}</p>
+                  <p className="mt-1 ps-6 text-[11px] text-faint">{r.basis}</p>
+                </li>
+              ))}
             </ul>
           )}
         </Card>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Link2, Send, Trash, WandSparkles, Play } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { commentsOf, userById } from "@/lib/selectors";
 import { Avatar, Badge, Card, EmptyState, Textarea } from "@/components/ui/primitives";
@@ -17,7 +18,7 @@ import { useToast } from "@/components/ui/toast";
 
 export default function PostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { state, meId, actions } = useStore();
+  const { state, me, meId, actions } = useStore();
   const { t, cat, relative, date } = useI18n();
   const toast = useToast();
   const router = useRouter();
@@ -50,9 +51,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <div className="mx-auto max-w-5xl">
-      <button onClick={() => router.back()} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> {t("common.back")}
-      </button>
+      <BackLink fallback={post.authorId === meId ? `/profile/${me?.username ?? ""}` : "/feed"} fallbackLabel={post.authorId === meId ? t("nav.profile") : t("nav.feed")} className="mb-3" />
       <Card className="overflow-hidden lg:grid lg:grid-cols-[1.15fr_1fr]">
         <div className="relative bg-ink-deep">
           <Image src={post.images[0]} alt={title} width={1000} height={1000} priority unoptimized={post.images[0].startsWith("data:")} className="h-full max-h-[78vh] w-full object-contain" />

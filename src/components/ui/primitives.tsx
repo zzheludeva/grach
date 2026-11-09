@@ -249,10 +249,10 @@ export function PageHeader({ title, subtitle, actions, className }: { title: str
   return (
     <div className={cn("mb-6 flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="min-w-0">
-        <h1 className="font-display text-3xl leading-tight text-ink sm:text-4xl">{title}</h1>
+        <h1 className="hyphens-auto break-words font-display text-[26px] leading-tight text-ink min-[400px]:text-3xl sm:text-4xl">{title}</h1>
         {subtitle && <p className="mt-1.5 max-w-2xl text-[15px] text-muted">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>}
     </div>
   );
 }

@@ -24,9 +24,10 @@ import type {
   Enrollment,
   Tutorial,
   OrderEvent,
+  Message,
 } from "./types";
 import { applyTemplateToSession, dueReminder, legacyEnrollment, seatsLeft, sessionAudience, significantChanges, splitLegacy, templateDiffForSessions, type ApplyMode, type LegacyWorkshop } from "./workshops";
-import { pendingAck, canConfirmReceived, validateTransition, type TransitionError, type TransitionProof } from "./orders";
+import { pendingReady, canConfirmReceived, canRemindReady, canSellerCancel, validateTransition, type TransitionError, type TransitionProof } from "./orders";
 import { DAY, uid } from "./utils";
 import { region } from "./regions";
 import { detectLocale } from "@/i18n/config";
@@ -41,7 +42,7 @@ import { canCancel } from "./orders";
 const STORAGE_KEY = "remeslo:v3";
 
 export interface AppState {
-  version: 5;
+  version: 6;
   sessionUserId: string | null;
   deviceLang: Locale;
   langSuggested: boolean;
@@ -56,7 +57,7 @@ function defaultSettings(country: CountryCode, lang: Locale, city?: string): Set
 
 function initialState(lang: Locale): AppState {
   return {
-    version: 5,
+    version: 6,
     sessionUserId: null,
     deviceLang: lang,
     langSuggested: true,
@@ -87,7 +88,8 @@ function useBuildStore() {
     } catch {}
     if (s && (s.version as number) === 3) s = migrateV3(s);
     if (s && (s.version as number) === 4) s = migrateV4(s);
-    if (!s || s.version !== 5) s = initialState(detectLocale(navigator.languages));
+    if (s && (s.version as number) === 5) s = migrateV5(s);
+    if (!s || s.version !== 6) s = initialState(detectLocale(navigator.languages));
     setState(s);
     loaded.current = true;
   }, []);
@@ -317,9 +319,29 @@ function useBuildStore() {
       viewPost(postId: string) {
         update((d) => ({ posts: d.posts.map((p) => (p.id === postId ? { ...p, views: p.views + 1 } : p)) }));
       },
-      sendMessage(toId: string, text: string, extra: { image?: string; orderId?: string } = {}) {
-        if (!meId || (!text.trim() && !extra.image)) return;
-        update((d) => ({ messages: [...d.messages, { id: uid("m"), fromId: meId, toId, text: text.trim(), at: now(), ...extra }] }));
+      /**
+       * One personal conversation per pair of users. Optional context (order, workshop/session) is stored
+       * on the message so both sides see what it is about. The recipient gets one unread notification per
+       * conversation (updated, not duplicated, while unread).
+       */
+      sendMessage(toId: string, text: string, extra: { image?: string; orderId?: string; workshopId?: string; sessionId?: string } = {}) {
+        if (!meId || toId === meId || (!text.trim() && !extra.image)) return;
+        const at = now();
+        update((d) => {
+          const meUser = d.users.find((u) => u.id === meId);
+          if (!d.users.some((u) => u.id === toId) || !meUser) return;
+          const ctx = Object.fromEntries(Object.entries(extra).filter(([, v]) => !!v));
+          const workshop = extra.workshopId ? d.workshops.find((w) => w.id === extra.workshopId) : undefined;
+          const existing = d.notifications.find((n) => n.userId === toId && n.key === "newMessage" && n.actorId === meId && !n.read);
+          const note: AppNotification = {
+            id: existing?.id ?? uid("n"), userId: toId, type: "system", actorId: meId, key: workshop ? "newMessageWorkshop" : "newMessage",
+            params: { name: meUser.name, title: workshop?.title ?? "" }, href: `/messages/${meUser.username}`, at, read: false,
+          };
+          return {
+            messages: [...d.messages, { id: uid("m"), fromId: meId, toId, text: text.trim(), at, ...ctx }],
+            notifications: [note, ...d.notifications.filter((n) => n.id !== note.id && !(n.userId === toId && n.actorId === meId && !n.read && n.key.startsWith("newMessage")))],
+          };
+        });
       },
 
       /* ---------- cart & orders ---------- */
@@ -421,25 +443,33 @@ function useBuildStore() {
         }));
         return newOrders.map((o) => o.id);
       },
-      cancelOrder(orderId: string) {
+      /** Buyer cancels before production; seller cancels before shipping, with a reason. The other side is notified. */
+      cancelOrder(orderId: string, reason = ""): boolean {
+        const snap = stateRef.current;
+        const o = snap?.data.orders.find((x) => x.id === orderId);
+        if (!meId || !o) return false;
+        const asBuyer = o.buyerId === meId && canCancel(o.status);
+        const asSeller = o.sellerId === meId && canSellerCancel(o.status) && reason.trim().length >= 3;
+        if (!asBuyer && !asSeller) return false;
+        const at = now();
+        const note: AppNotification = {
+          id: uid("n"), userId: asBuyer ? o.sellerId : o.buyerId, type: "order", actorId: meId,
+          key: asBuyer ? "orderCancelledByBuyer" : "orderCancelledBySeller", params: { number: o.number, reason: reason.trim() }, href: `/orders/${o.id}`, at, read: false,
+        };
         update((d) => ({
-          orders: d.orders.map((o) =>
-            o.id === orderId && o.buyerId === meId && canCancel(o.status)
-              ? { ...o, status: "cancelled", eta: undefined, history: [...o.history, { status: "cancelled", from: o.status, by: meId!, at: now() }] }
-              : o,
+          orders: d.orders.map((x) =>
+            x.id === orderId
+              ? { ...x, status: "cancelled", eta: undefined, cancelledBy: meId, cancelReason: reason.trim() || undefined, history: [...x.history, { status: "cancelled", from: x.status, by: meId, at, comment: reason.trim() || undefined }] }
+              : x,
           ),
-          notifications: (() => {
-            const o = d.orders.find((x) => x.id === orderId);
-            return o && o.buyerId === meId && canCancel(o.status)
-              ? [{ id: uid("n"), userId: o.sellerId, type: "order" as const, actorId: meId!, key: "orderCancelledByBuyer", params: { number: o.number }, href: `/orders/${o.id}`, at: now(), read: false }, ...d.notifications]
-              : d.notifications;
-          })(),
+          notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
         }));
+        return true;
       },
       /**
-       * Seller moves the order one step forward. Important steps require proof
-       * (photo for "ready", tracking number or link for "handed_over"); the buyer is notified
-       * and can accept or reject the step. The photo is also sent to the buyer in messages.
+       * Seller moves the order one step forward. "ready" needs photos and becomes a readiness request
+       * the buyer must answer; "handed_over" needs a tracking number (with carrier) or link and is only
+       * possible after the buyer confirmed readiness. Readiness photos are also sent in messages.
        */
       transitionOrder(orderId: string, to: OrderStatus, proof: TransitionProof, messageText = ""): { ok: true } | { error: TransitionError } {
         const snap = stateRef.current;
@@ -449,22 +479,26 @@ function useBuildStore() {
         if (err) return { error: err };
         const at = now();
         const clean = (v?: string) => (v && v.trim() ? v.trim() : undefined);
+        const photos = to === "ready" ? (proof.photos ?? []).filter(Boolean) : [];
         const ev: OrderEvent = {
           status: to,
           from: o.status,
           at,
           by: meId,
           comment: clean(proof.comment),
-          photo: proof.photo,
+          photo: photos[0],
+          photos: photos.length ? photos : undefined,
           carrier: clean(proof.carrier),
           trackingNumber: clean(proof.trackingNumber),
           trackingUrl: clean(proof.trackingUrl),
-          ack: "pending",
+          ack: to === "ready" ? "pending" : undefined,
         };
+        const key = to === "ready" ? "orderReadyRequest" : to === "handed_over" ? "orderShipped" : "orderStep";
         const note: AppNotification = {
-          id: uid("n"), userId: o.buyerId, type: "order", actorId: meId, key: "orderStep", params: { number: o.number, status: `@orderStatus.${to}` }, href: `/orders/${o.id}`, at, read: false,
+          id: uid("n"), userId: o.buyerId, type: "order", actorId: meId, key, params: { number: o.number, status: `@orderStatus.${to}` }, href: `/orders/${o.id}`, at, read: false,
         };
-        const msg = to === "ready" && proof.photo ? { id: uid("m"), fromId: meId, toId: o.buyerId, text: [messageText, clean(proof.comment)].filter(Boolean).join("\n\n"), image: proof.photo, orderId: o.id, at } : null;
+        const text = [messageText, clean(proof.comment)].filter(Boolean).join("\n\n");
+        const msgs: Message[] = photos.map((src, i) => ({ id: uid("m"), fromId: meId, toId: o.buyerId, text: i === 0 ? text : "", image: src, orderId: o.id, at }));
         update((d) => ({
           orders: d.orders.map((x) =>
             x.id === orderId
@@ -472,72 +506,81 @@ function useBuildStore() {
                   ...x,
                   status: to,
                   history: [...x.history, ev],
-                  readyPhoto: to === "ready" ? proof.photo : x.readyPhoto,
+                  ...(to === "ready"
+                    ? { readyPhoto: photos[0], readyPhotos: photos, readyRequestedAt: at, readyConfirmedAt: undefined, readyRemindedAt: undefined, readyRejection: undefined }
+                    : {}),
                   shipment: to === "handed_over" ? { carrier: ev.carrier, number: ev.trackingNumber, url: ev.trackingUrl, at } : x.shipment,
                 }
               : x,
           ),
           notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
-          messages: msg ? [...d.messages.filter((m) => m.id !== msg.id), msg] : d.messages,
+          messages: [...d.messages.filter((m) => !msgs.some((x) => x.id === m.id)), ...msgs],
         }));
         return { ok: true };
       },
-      /** Buyer accepts the latest seller step. */
-      ackOrderStep(orderId: string) {
-        update((d) => ({
-          orders: d.orders.map((o) => {
-            if (o.id !== orderId || o.buyerId !== meId || !pendingAck(o)) return o;
-            const h = [...o.history];
-            h[h.length - 1] = { ...h[h.length - 1], ack: "confirmed" };
-            return { ...o, history: h };
-          }),
-        }));
-      },
-      /** Buyer rejects the latest seller step with a reason: the order returns to the previous status. */
-      rejectOrderStep(orderId: string, reason: string) {
+      /** Buyer confirms that the finished item matches the order and may be shipped. */
+      confirmReady(orderId: string): boolean {
         const snap = stateRef.current;
         const o = snap?.data.orders.find((x) => x.id === orderId);
-        const last = o && pendingAck(o);
-        if (!meId || !o || o.buyerId !== meId || !last?.from || !reason.trim()) return false;
+        const req = o && pendingReady(o);
+        if (!meId || !o || o.buyerId !== meId || !req) return false;
         const at = now();
-        const from = last.from;
-        const note: AppNotification = {
-          id: uid("n"), userId: o.sellerId, type: "order", actorId: meId, key: "orderStepRejected", params: { number: o.number, status: `@orderStatus.${last.status}`, reason: reason.trim() }, href: `/orders/${o.id}`, at, read: false,
-        };
+        const note: AppNotification = { id: uid("n"), userId: o.sellerId, type: "order", actorId: meId, key: "orderReadyConfirmed", params: { number: o.number }, href: `/orders/${o.id}`, at, read: false };
+        update((d) => ({
+          orders: d.orders.map((x) =>
+            x.id === orderId
+              ? { ...x, readyConfirmedAt: at, history: [...x.history.map((h) => (h === req || (h.at === req.at && h.status === "ready" && !h.kind) ? { ...h, ack: "confirmed" as const } : h)), { status: "ready", at, by: meId, kind: "readyConfirmed" }] }
+              : x,
+          ),
+          notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
+        }));
+        return true;
+      },
+      /** Buyer rejects readiness with a comment: the order goes back to the seller ("preparing") to fix the remarks. */
+      rejectReady(orderId: string, reason: string): boolean {
+        const snap = stateRef.current;
+        const o = snap?.data.orders.find((x) => x.id === orderId);
+        const req = o && pendingReady(o);
+        const r = reason.trim();
+        if (!meId || !o || o.buyerId !== meId || !req || r.length < 3) return false;
+        const at = now();
+        const note: AppNotification = { id: uid("n"), userId: o.sellerId, type: "order", actorId: meId, key: "orderReadyRejected", params: { number: o.number, reason: r }, href: `/orders/${o.id}`, at, read: false };
         update((d) => ({
           orders: d.orders.map((x) => {
             if (x.id !== orderId) return x;
-            const h = [...x.history];
-            h[h.length - 1] = { ...h[h.length - 1], ack: "rejected", rejectReason: reason.trim() };
-            h.push({ status: from, from: last.status, at, by: meId, comment: reason.trim(), revert: true });
-            return {
-              ...x,
-              status: from,
-              history: h,
-              readyPhoto: last.status === "ready" ? undefined : x.readyPhoto,
-              shipment: last.status === "handed_over" ? undefined : x.shipment,
-            };
+            const h = x.history.map((e) => (e.at === req.at && e.status === "ready" && !e.kind ? { ...e, ack: "rejected" as const, rejectReason: r } : e));
+            h.push({ status: "preparing", from: "ready", at, by: meId, comment: r, revert: true, kind: "readyRejected" });
+            return { ...x, status: "preparing", history: h, readyPhoto: undefined, readyPhotos: undefined, readyRequestedAt: undefined, readyRemindedAt: undefined, readyRejection: { reason: r, at } };
           }),
           notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
         }));
         return true;
       },
-      confirmReceived(orderId: string) {
+      /** Seller reminds a buyer who hasn't answered the readiness request (at most once per 24 h). */
+      remindReady(orderId: string): boolean {
+        const snap = stateRef.current;
+        const o = snap?.data.orders.find((x) => x.id === orderId);
+        if (!meId || !o || o.sellerId !== meId || !canRemindReady(o)) return false;
+        const at = now();
+        const note: AppNotification = { id: uid("n"), userId: o.buyerId, type: "order", actorId: meId, key: "orderReadyReminder", params: { number: o.number }, href: `/orders/${o.id}`, at, read: false };
         update((d) => ({
-          orders: d.orders.map((o) => {
-            if (o.id !== orderId || o.buyerId !== meId || !canConfirmReceived(o.status)) return o;
-            const h = [...o.history];
-            if (h[h.length - 1]?.ack === "pending") h[h.length - 1] = { ...h[h.length - 1], ack: "confirmed" };
-            h.push({ status: "received", from: o.status, by: meId!, at: now() });
-            return { ...o, status: "received", eta: undefined, history: h };
-          }),
-          notifications: (() => {
-            const o = d.orders.find((x) => x.id === orderId);
-            return o && o.buyerId === meId && canConfirmReceived(o.status)
-              ? [{ id: uid("n"), userId: o.sellerId, type: "order" as const, actorId: meId!, key: "orderReceived", params: { number: o.number }, href: `/orders/${o.id}`, at: now(), read: false }, ...d.notifications]
-              : d.notifications;
-          })(),
+          orders: d.orders.map((x) => (x.id === orderId ? { ...x, readyRemindedAt: at, history: [...x.history, { status: "ready", at, by: meId, kind: "readyReminder" }] } : x)),
+          notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
         }));
+        return true;
+      },
+      /** Buyer confirms receipt after shipping → the order is completed. Never automatic. */
+      confirmReceived(orderId: string) {
+        const snap = stateRef.current;
+        const o = snap?.data.orders.find((x) => x.id === orderId);
+        if (!meId || !o || o.buyerId !== meId || !canConfirmReceived(o.status)) return false;
+        const at = now();
+        const note: AppNotification = { id: uid("n"), userId: o.sellerId, type: "order", actorId: meId, key: "orderReceived", params: { number: o.number }, href: `/orders/${o.id}`, at, read: false };
+        update((d) => ({
+          orders: d.orders.map((x) => (x.id === orderId ? { ...x, status: "received", eta: undefined, history: [...x.history, { status: "received", from: x.status, by: meId, at }] } : x)),
+          notifications: [note, ...d.notifications.filter((n) => n.id !== note.id)],
+        }));
+        return true;
       },
       addProductReview(orderId: string, productId: string, rating: number, text: string) {
         if (!meId) return;
@@ -574,6 +617,30 @@ function useBuildStore() {
           if (!d.enrollments.some((e) => e.userId === meId && e.sessionId === sessionId)) return;
           return { enrollments: d.enrollments.filter((e) => !(e.userId === meId && e.sessionId === sessionId)) };
         });
+      },
+      /**
+       * Organizer adds a registered user to their own session. Same checks as self-booking: the session must be
+       * upcoming and not cancelled, no double booking, the seat limit is respected.
+       */
+      addParticipant(sessionId: string, userId: string, seats = 1): "ok" | "full" | "duplicate" | "closed" | "forbidden" {
+        const snap = stateRef.current;
+        if (!meId || !snap) return "forbidden";
+        const s = snap.data.sessions.find((x) => x.id === sessionId);
+        const w = s && snap.data.workshops.find((x) => x.id === s.workshopId);
+        if (!s || !w || s.hostId !== meId || w.hostId !== meId) return "forbidden";
+        if (userId === meId || !snap.data.users.some((u) => u.id === userId)) return "forbidden";
+        if (s.status !== "scheduled" || new Date(s.startsAt).getTime() <= Date.now() || w.status === "archived") return "closed";
+        if (snap.data.enrollments.some((e) => e.userId === userId && e.sessionId === sessionId)) return "duplicate";
+        const n = Math.max(1, Math.floor(seats));
+        if (n > seatsLeft(snap.data, s)) return "full";
+        const at = now();
+        const booking: Enrollment = { id: uid("e"), userId, sessionId, workshopId: w.id, seats: n, at, addedBy: meId };
+        const note: AppNotification = { id: uid("n"), userId, type: "workshop", actorId: meId, key: "addedToSession", params: { title: w.title, startsAt: s.startsAt }, href: `/learn/workshop/${w.id}?session=${s.id}`, at, read: false };
+        update((d) => ({
+          enrollments: [...d.enrollments.filter((e) => !(e.userId === userId && e.sessionId === sessionId)), booking],
+          notifications: [note, ...d.notifications.filter((x) => x.id !== note.id)],
+        }));
+        return "ok";
       },
       /** Host removes a participant's booking from their own session. */
       removeBooking(enrollmentId: string) {
@@ -916,7 +983,7 @@ function migrateV3(old: AppState): AppState {
   });
   return {
     ...old,
-    version: 4 as unknown as 5, // intermediate step, finished by migrateV4
+    version: 4 as unknown as 6, // intermediate step, finished by migrateV4
     data: {
       ...d,
       posts: d.posts.map((p) => ({ ...p, technique: p.technique ?? techOf.get(p.id) })),
@@ -937,7 +1004,7 @@ function migrateV3(old: AppState): AppState {
 function migrateV4(old: AppState): AppState {
   const fresh = buildSeed();
   const d = old.data as SeedData & { sessions?: WorkshopSession[] };
-  if (d.sessions) return { ...old, version: 5 };
+  if (d.sessions) return { ...old, version: 5 as unknown as 6 };
   const legacy = d.workshops as unknown as LegacyWorkshop[];
   const legacyEnrollments = d.enrollments as unknown as { userId: string; workshopId: string; at: string }[];
   const enrollments = legacyEnrollments.map(legacyEnrollment);
@@ -957,7 +1024,7 @@ function migrateV4(old: AppState): AppState {
   const draft = fresh.tutorials.find((x) => x.id === "t10");
   return {
     ...old,
-    version: 5,
+    version: 5 as unknown as 6, // finished by migrateV5
     data: {
       ...d,
       workshops,
@@ -968,6 +1035,34 @@ function migrateV4(old: AppState): AppState {
       // Notifications about former events keep working: their links point at the same template id.
     },
   };
+}
+
+/**
+ * v5 → v6: only two buyer confirmations remain (readiness and receipt).
+ * Orders waiting in "ready" get a readiness request derived from their history; buyer answers pending on
+ * other steps are dropped (no longer required). Readiness demo orders are added. No data is removed.
+ */
+function migrateV5(old: AppState): AppState {
+  const fresh = buildSeed();
+  const orders = old.data.orders.map((o) => {
+    const history = o.history.map((h) => (h.ack === "pending" && h.status !== "ready" ? { ...h, ack: undefined } : h));
+    if (o.status !== "ready" || o.readyRequestedAt) return { ...o, history };
+    const req = [...history].reverse().find((h) => h.status === "ready" && !h.kind && h.from);
+    const photos = req?.photos ?? (req?.photo ?? o.readyPhoto ? [(req?.photo ?? o.readyPhoto)!] : []);
+    const confirmed = req?.ack === "confirmed";
+    return {
+      ...o,
+      history: history.map((h) => (h === req && !h.ack ? { ...h, ack: "pending" as const } : h)),
+      readyPhotos: photos,
+      readyPhoto: photos[0],
+      readyRequestedAt: req?.at ?? o.createdAt,
+      readyConfirmedAt: confirmed ? req!.at : undefined,
+    };
+  });
+  const users = new Set(old.data.users.map((u) => u.id));
+  const products = new Set(old.data.products.map((p) => p.id));
+  const extra = fresh.orders.filter((o) => o.id.startsWith("o2") && !orders.some((x) => x.id === o.id) && users.has(o.buyerId) && users.has(o.sellerId) && o.items.every((i) => products.has(i.productId)));
+  return { ...old, version: 6, data: { ...old.data, orders: [...orders, ...extra] } };
 }
 
 function bumpCat(d: SeedData, userId: string, cat: string, by: number) {

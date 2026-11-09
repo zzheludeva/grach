@@ -1,7 +1,8 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Search, Truck } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { useQueryFlag, useQueryState } from "@/lib/nav-history";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES, categorySearchTerms } from "@/i18n/content";
 import { Chip, EmptyState, Input, PageHeader, Select } from "@/components/ui/primitives";
@@ -16,11 +17,12 @@ export default function Market() {
   const { state, settings, actions } = useStore();
   const { t, cat } = useI18n();
   const d = state!.data;
-  const [q, setQ] = useState("");
-  const [category, setCategory] = useState<CategoryId | "">("");
-  const [sort, setSort] = useState<Sort>("new");
-  const [avail, setAvail] = useState<"" | "in_stock" | "made_to_order">("");
-  const [shipsHere, setShipsHere] = useState(false);
+  // Query, filters and sort live in the URL so returning from a product restores the same list.
+  const [q, setQ] = useQueryState<string>("q", "");
+  const [category, setCategory] = useQueryState<CategoryId | "">("cat", "", ["", ...CATEGORIES.map((c) => c.id)]);
+  const [sort, setSort] = useQueryState<Sort>("sort", "new", ["new", "popular", "priceAsc", "priceDesc"] as Sort[]);
+  const [avail, setAvail] = useQueryState<"" | "in_stock" | "made_to_order">("avail", "", ["", "in_stock", "made_to_order"]);
+  const [shipsHere, setShipsHere] = useQueryFlag("ships", false);
 
   const list = useMemo(() => {
     const nq = norm(q.trim());
@@ -51,7 +53,7 @@ export default function Market() {
         <div className="flex flex-wrap gap-2">
           <div className="relative min-w-0 flex-1 basis-64">
             <Search className="pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("market.search")} aria-label={t("market.search")} className="ps-10" />
+            <Input type="search" enterKeyHint="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("market.search")} aria-label={t("market.search")} className="ps-10" />
           </div>
           <Select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t("market.sort")} className="w-auto min-w-44 flex-1 sm:flex-none">
             <option value="new">{t("market.sortNew")}</option>

@@ -24,19 +24,31 @@ export function Modal({
 }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the latest onClose without re-running the open/focus effect: parents usually pass an inline
+  // function, and re-running the effect on every keystroke moved focus away from the field being typed in.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeRef.current();
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
-    setTimeout(() => ref.current?.querySelector<HTMLElement>("input,textarea,button,select,a")?.focus(), 30);
+    // Focus the first form field (not the close button) once, when the dialog opens.
+    const timer = setTimeout(() => {
+      const root = ref.current;
+      if (!root || root.contains(document.activeElement)) return;
+      (root.querySelector<HTMLElement>("input:not([type=hidden]),textarea,select") ?? root.querySelector<HTMLElement>("button,a"))?.focus({ preventScroll: true });
+    }, 30);
     return () => {
+      clearTimeout(timer);
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open || typeof document === "undefined") return null;
   const widths = { sm: "sm:max-w-md", md: "sm:max-w-lg", lg: "sm:max-w-2xl", xl: "sm:max-w-5xl" };
   return createPortal(

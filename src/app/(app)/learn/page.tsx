@@ -1,7 +1,7 @@
 "use client";
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { MapPin } from "lucide-react";
+import { useMemo } from "react";
+import { CalendarPlus, FilePlus2, MapPin } from "lucide-react";
+import { useQueryFlag, useQueryState } from "@/lib/nav-history";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES } from "@/i18n/content";
@@ -10,22 +10,22 @@ import { TutorialCard, WorkshopCard } from "@/components/common/cards";
 import { region } from "@/lib/regions";
 import type { CategoryId, Enrollment, Level, Workshop, WorkshopSession } from "@/lib/types";
 import { upcomingSessions } from "@/lib/workshops";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 
 type Tab = "materials" | "workshops" | "mine";
 
 export default function Learn() {
-  const sp = useSearchParams();
   const { state, meId, settings, actions } = useStore();
   const { t, cat } = useI18n();
   const d = state!.data;
-  const [tab, setTab] = useState<Tab>((["materials", "workshops", "mine"].includes(sp.get("tab") ?? "") ? sp.get("tab") : "materials") as Tab);
-  const [category, setCategory] = useState<CategoryId | "">("");
-  const [level, setLevel] = useState<Level | "">("");
-  const [duration, setDuration] = useState<"" | "short" | "mid" | "long">("");
-  const [price, setPrice] = useState<"" | "free" | "paid">("");
-  const [format, setFormat] = useState<"" | "online" | "offline">("");
-  const [cityOnly, setCityOnly] = useState(true);
+  // Tab and filters live in the URL: going back from a material or workshop restores them.
+  const [tab, setTab] = useQueryState<Tab>("tab", "materials", ["materials", "workshops", "mine"]);
+  const [category, setCategory] = useQueryState<CategoryId | "">("cat", "", ["", ...CATEGORIES.map((c) => c.id)]);
+  const [level, setLevel] = useQueryState<Level | "">("level", "", ["", "beginner", "intermediate", "advanced"]);
+  const [duration, setDuration] = useQueryState<"" | "short" | "mid" | "long">("dur", "", ["", "short", "mid", "long"]);
+  const [price, setPrice] = useQueryState<"" | "free" | "paid">("price", "", ["", "free", "paid"]);
+  const [format, setFormat] = useQueryState<"" | "online" | "offline">("fmt", "", ["", "online", "offline"]);
+  const [cityOnly, setCityOnly] = useQueryFlag("city", true);
 
   const tutorials = useMemo(
     () =>
@@ -70,13 +70,23 @@ export default function Learn() {
 
   return (
     <div>
-      <PageHeader title={t("learn.title")} subtitle={t("learn.subtitle")} />
+      <PageHeader
+        title={t("learn.title")}
+        subtitle={t("learn.subtitle")}
+        actions={
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            <ButtonLink href="/learn/new/workshop" variant="secondary" size="sm" className="min-h-10">
+              <CalendarPlus className="size-4" /> {t("learnx.createWorkshop")}
+            </ButtonLink>
+            <ButtonLink href="/learn/new/tutorial" variant="secondary" size="sm" className="min-h-10">
+              <FilePlus2 className="size-4" /> {t("learnx.createTutorial")}
+            </ButtonLink>
+          </div>
+        }
+      />
       <Tabs
         value={tab}
-        onChange={(v) => {
-          setTab(v);
-          history.replaceState(null, "", `?tab=${v}`);
-        }}
+        onChange={(v) => setTab(v)}
         items={[
           { value: "materials", label: t("learn.materials"), count: d.tutorials.filter((x) => x.status === "published").length },
           { value: "workshops", label: t("learn.workshops") },

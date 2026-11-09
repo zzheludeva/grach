@@ -2,7 +2,7 @@
 import { Badge } from "@/components/ui/primitives";
 import { useI18n } from "@/i18n/I18nProvider";
 import { STATUS_TONE } from "@/lib/orders";
-import type { OrderStatus } from "@/lib/types";
+import type { Order, OrderStatus } from "@/lib/types";
 
 export function OrderStatusBadge({ status, country }: { status: OrderStatus; country?: string }) {
   const { t } = useI18n();
@@ -13,4 +13,10 @@ export function OrderStatusBadge({ status, country }: { status: OrderStatus; cou
 export function statusLabelKey(status: OrderStatus, deliveryMethod?: string) {
   if (status === "arrived") return deliveryMethod === "pickup" || deliveryMethod === "post" ? "orderStatus.arrived_pickup" : "orderStatus.arrived_courier";
   return `orderStatus.${status}`;
+}
+
+/** Label of the order's current state: "ready" is split into "awaiting the buyer" and "readiness confirmed". */
+export function orderLabelKey(o: Order) {
+  if (o.status === "ready") return o.readyConfirmedAt ? "ordx.status.readyConfirmed" : "ordx.status.readyPending";
+  return statusLabelKey(o.status, o.deliveryMethod);
 }

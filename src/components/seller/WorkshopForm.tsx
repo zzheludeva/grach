@@ -1,4 +1,5 @@
 "use client";
+import { BackLink } from "@/components/common/BackLink";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore, type WorkshopInput } from "@/lib/store";
@@ -23,7 +24,8 @@ type Errors = Partial<Record<"title" | "cover" | "description" | "duration" | "p
 const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
 /** Template of a workshop: everything that does not change from one date to another. */
-export function WorkshopForm({ workshop }: { workshop?: Workshop }) {
+/** One form for creating and editing a workshop template — used from the author dashboard and from Learning. */
+export function WorkshopForm({ workshop, origin = "dashboard" }: { workshop?: Workshop; origin?: "dashboard" | "learn" }) {
   const { t, cat, locale } = useI18n();
   const { state, settings, actions } = useStore();
   const router = useRouter();
@@ -98,7 +100,8 @@ export function WorkshopForm({ workshop }: { workshop?: Workshop }) {
     if ("error" in res) return toast({ text: res.error === "forbidden" ? t("common.forbidden") : t("errors.notFound"), tone: "error" });
     const msg = res.notified > 0 ? t("ws.toast.appliedNotified", { count: res.updatedSessions, people: res.notified }) : res.updatedSessions > 0 ? t("ws.toast.applied", { count: res.updatedSessions }) : publish && status === "draft" ? t("ws.toast.published") : t("ws.toast.saved");
     toast({ text: msg });
-    router.push(`/dashboard/workshops/${res.id}`);
+    // replace: the form itself doesn't stay in history, so "back" from the result returns to where creation started.
+    router.replace(`/dashboard/workshops/${res.id}`);
   };
 
   const submit = (publish: boolean) => {
@@ -117,6 +120,7 @@ export function WorkshopForm({ workshop }: { workshop?: Workshop }) {
 
   return (
     <div className="mx-auto max-w-3xl">
+      <BackLink fallback={origin === "learn" ? "/learn" : "/dashboard/workshops"} fallbackLabel={origin === "learn" ? t("nav.learn") : t("nav.myWorkshops")} className="mb-2" />
       <PageHeader
         title={workshop ? t("ws.form.editTitle") : t("ws.form.newTitle")}
         subtitle={t("ws.form.subtitle")}

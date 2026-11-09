@@ -3,8 +3,9 @@ import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, Clock, MapPin, MonitorPlay, Users, CheckCircle2, Pencil, Link2, Wrench, ScrollText, GraduationCap, Minus, Plus } from "lucide-react";
+import { CalendarDays, Clock, MapPin, MessageCircle, MonitorPlay, Users, CheckCircle2, Pencil, Link2, Wrench, ScrollText, GraduationCap, Minus, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { userById } from "@/lib/selectors";
 import { techniqueName } from "@/i18n/content";
@@ -50,9 +51,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <Link href={isHost ? `/dashboard/workshops/${w.id}` : "/learn?tab=workshops"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-          <ArrowLeft className="size-4 rtl:rotate-180" /> {isHost ? t("nav.myWorkshops") : t("learn.workshops")}
-        </Link>
+        <BackLink fallback={isHost ? `/dashboard/workshops/${w.id}` : "/learn?tab=workshops"} fallbackLabel={isHost ? t("ws.mine.manage") : t("learn.workshops")} />
         {isHost && (
           <ButtonLink href={`/dashboard/workshops/${w.id}`} size="sm" variant="soft">
             <Pencil className="size-3.5" /> {t("ws.mine.manage")}
@@ -61,7 +60,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
       </div>
       {w.status === "draft" && <DemoNote className="mb-4">{t("ev.page.draft")}</DemoNote>}
       {w.status === "archived" && <DemoNote className="mb-4">{t("ws.page.archived")}</DemoNote>}
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px] [&>*]:min-w-0">
         <div className="min-w-0">
           <div className="relative aspect-[16/9] overflow-hidden rounded-3xl bg-line">
             <Image src={gallery[photo] ?? w.cover} alt={w.title} fill priority sizes="(max-width: 1024px) 100vw, 640px" unoptimized={(gallery[photo] ?? w.cover).startsWith("data:")} className="object-cover" />
@@ -132,6 +131,11 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
             </Link>
             <FollowButton userId={host.id} />
           </Card>
+          {!isHost && (
+            <ButtonLink href={`/messages/${host.username}?workshop=${w.id}${session ? `&session=${session.id}` : ""}`} variant="secondary" className="mt-3 w-full sm:w-auto">
+              <MessageCircle className="size-4" /> {t("wsx.messageHost")}
+            </ButtonLink>
+          )}
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-32 lg:h-fit">

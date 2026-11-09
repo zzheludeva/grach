@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Hammer, MessageCircle, Minus, Plus, Ruler, Truck, MapPin, ShoppingCart, PackageCheck, Pencil, Brush, ListChecks, Tag } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { canShipTo, cartOf, rating, userById } from "@/lib/selectors";
 import { Avatar, Badge, Card, EmptyState, Stars, DemoNote } from "@/components/ui/primitives";
@@ -57,9 +58,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <button onClick={() => router.back()} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-          <ArrowLeft className="size-4" /> {t("common.back")}
-        </button>
+        <BackLink fallback={isMine ? "/dashboard/products" : "/market"} fallbackLabel={isMine ? t("nav.myProducts") : t("nav.market")} />
         {isMine && (
           <ButtonLink href={`/dashboard/products/${p.id}`} size="sm" variant="soft">
             <Pencil className="size-3.5" /> {t("sell.page.edit")}
@@ -269,7 +268,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
         <Card className="overflow-hidden">
           <div className="grout px-5 py-4">
             <p className="font-display text-2xl text-white">{t("product.story")}</p>

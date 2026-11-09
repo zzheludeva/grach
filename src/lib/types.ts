@@ -239,6 +239,8 @@ export interface Enrollment {
   workshopId: string;
   seats: number;
   at: string;
+  /** Set when the organizer added the participant manually. */
+  addedBy?: string;
 }
 
 export interface TutorialPurchase {
@@ -293,10 +295,17 @@ export interface OrderEvent {
   by?: string;
   comment?: string;
   photo?: string;
+  /** All photos of a readiness request (photo = the first one). */
+  photos?: string[];
   carrier?: string;
   trackingNumber?: string;
   trackingUrl?: string;
-  /** Buyer's response to a seller's transition. */
+  /**
+   * History entries that are not status changes: the buyer confirming or rejecting readiness,
+   * a seller reminder, a cancellation reason. Absent for ordinary status changes.
+   */
+  kind?: "readyConfirmed" | "readyRejected" | "readyReminder";
+  /** Buyer's response to the readiness request (older data may carry it on other steps; it is ignored there). */
   ack?: "pending" | "confirmed" | "rejected";
   rejectReason?: string;
   /** The step was created by the buyer rejecting the previous transition. */
@@ -322,6 +331,15 @@ export interface Order {
   tracking: string;
   /** Photo of the finished item, required for "ready". */
   readyPhoto?: string;
+  readyPhotos?: string[];
+  /** Readiness request sent to the buyer / confirmed by the buyer / last seller reminder. */
+  readyRequestedAt?: string;
+  readyConfirmedAt?: string;
+  readyRemindedAt?: string;
+  /** Latest rejected readiness request: the seller fixes the remarks and sends a new one. */
+  readyRejection?: { reason: string; at: string };
+  cancelledBy?: string;
+  cancelReason?: string;
   /** Proof of dispatch, required for "handed_over". */
   shipment?: { carrier?: string; number?: string; url?: string; at: string };
   eta?: string;
@@ -428,6 +446,9 @@ export interface Message {
   at: string;
   image?: string;
   orderId?: string;
+  /** Conversation context: a workshop (and its session) the message is about. */
+  workshopId?: string;
+  sessionId?: string;
 }
 
 export interface Settings {

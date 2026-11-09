@@ -3,30 +3,32 @@ import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Check, Copy, MessageCircle, PartyPopper, RotateCcw, Star, ExternalLink, Truck, Camera } from "lucide-react";
+import { BellRing, Check, Copy, Info, MessageCircle, PartyPopper, RotateCcw, Star, ExternalLink, Truck, Camera, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { userById } from "@/lib/selectors";
-import { canCancel, canConfirmReceived, pendingAck, sellerNext, STATUS_TONE } from "@/lib/orders";
-import { OrderTimeline, SellerStepModal, RejectModal, PhotoViewer } from "@/components/orders/OrderFlow";
+import { canCancel, canConfirmReceived, canRemindReady, canSellerCancel, nextStep, pendingReady, readyWaitingDays, READY_NO_RESPONSE_DAYS, READY_REMIND_COOLDOWN_H, sellerNext, STATUS_TONE } from "@/lib/orders";
+import { OrderTimeline, SellerStepModal, RejectModal, PhotoViewer, SellerCancelModal } from "@/components/orders/OrderFlow";
+import { BackLink } from "@/components/common/BackLink";
 import { formatAddressLines } from "@/lib/regions";
 import { Avatar, Badge, Card, DemoNote, EmptyState, Textarea } from "@/components/ui/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-import { statusLabelKey } from "@/components/common/OrderStatusBadge";
+import { orderLabelKey } from "@/components/common/OrderStatusBadge";
 import { cn } from "@/lib/utils";
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const sp = useSearchParams();
   const { state, meId, actions } = useStore();
-  const { t, money, date } = useI18n();
+  const { t, money, date, relative } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const d = state!.data;
   const o = d.orders.find((x) => x.id === id);
   const [cancel, setCancel] = useState(false);
+  const [sellerCancel, setSellerCancel] = useState(false);
   const [review, setReview] = useState<{ productId: string; rating: number; text: string } | null>(null);
   const [step, setStep] = useState(false);
   const [reject, setReject] = useState(false);
@@ -38,14 +40,16 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   const isBuyer = o.buyerId === meId;
   const isSeller = o.sellerId === meId;
   const buyer = userById(d, o.buyerId);
-  const nxt = isSeller ? sellerNext(o.status) : null;
-  const waiting = pendingAck(o);
+  const nxt = isSeller ? sellerNext(o) : null;
+  const waiting = pendingReady(o);
+  const ns = nextStep(o);
+  const waitDays = readyWaitingDays(o);
+  const noResponse = !!waiting && waitDays >= READY_NO_RESPONSE_DAYS;
+  const photos = o.readyPhotos?.length ? o.readyPhotos : o.readyPhoto ? [o.readyPhoto] : [];
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href="/orders" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> {t("orders.title")}
-      </Link>
+      <BackLink fallback={isSeller ? "/orders?role=seller" : "/orders"} fallbackLabel={isSeller ? t("nav2.sales") : t("nav2.purchases")} className="mb-3" />
       {placed && (
         <div className="mb-5 flex items-start gap-3 rounded-2xl bg-ink p-4 text-white">
           <PartyPopper className="mt-0.5 size-5 shrink-0 text-saffron" />
@@ -55,53 +59,103 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       )}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <h1 className="nums font-display text-3xl text-ink">{t("orders.order", { number: o.number })}</h1>
-        <Badge tone={STATUS_TONE[o.status]} className="text-sm">
-          {t(statusLabelKey(o.status, o.deliveryMethod))}
-        </Badge>
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="nums font-display text-2xl leading-tight text-ink min-[380px]:text-[28px] sm:text-3xl">{t("orders.order", { number: o.number })}</h1>
+        <Badge tone={STATUS_TONE[o.status]} className="text-sm">{t(orderLabelKey(o))}</Badge>
+        <span className="text-xs font-semibold text-muted">{isSeller ? t("nav2.youSell") : t("nav2.youBuy")}</span>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Who acts next — the same card for both sides, worded for the viewer. */}
+      <div
+        className={cn(
+          "mb-5 flex items-start gap-3 rounded-2xl border p-4 text-sm",
+          ns.who === "none" ? "border-line bg-surface" : (ns.who === "seller") === isSeller ? "border-teal/50 bg-teal-soft/50" : "border-line bg-surface",
+        )}
+      >
+        <Info className="mt-0.5 size-4 shrink-0 text-teal" />
+        <div className="min-w-0">
+          <p className="font-bold text-ink">
+            {ns.who === "none" ? t(`ordx.next.${ns.key}`) : (ns.who === "seller") === isSeller ? t(`ordx.next.you.${ns.key}`) : t(`ordx.next.other.${ns.key}`)}
+          </p>
+          <p className="mt-0.5 text-muted">{t(`ordx.nextHint.${ns.key}`)}</p>
+        </div>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px] [&>*]:min-w-0">
         <div className="min-w-0 space-y-6">
           {isBuyer && waiting && (
-            <Card className="border-saffron/60 bg-saffron-soft/40 p-5">
-              <p className="font-bold text-ink">{t("ord.ackTitle", { status: t(`orderStatus.${waiting.status}`) })}</p>
-              <p className="mt-1 text-sm text-muted">{t("ord.ackText")}</p>
-              {waiting.photo && (
-                <button onClick={() => setViewPhoto(waiting.photo!)} className="relative mt-3 block size-28 overflow-hidden rounded-xl border border-line">
-                  <Image src={waiting.photo} alt={t("ord.readyPhoto")} fill sizes="112px" unoptimized className="object-cover" />
-                </button>
+            <Card className="border-saffron/60 bg-saffron-soft/40 p-4 sm:p-5">
+              <p className="font-bold text-ink">{t("ordx.askTitle")}</p>
+              <p className="mt-1 text-sm text-muted">{t("ordx.askText")}</p>
+              {photos.length > 0 && (
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+                  {photos.map((src, i) => (
+                    <button key={i} onClick={() => setViewPhoto(src)} className="relative block aspect-square overflow-hidden rounded-xl border border-line sm:size-28" aria-label={t("ord.openPhoto")}>
+                      <Image src={src} alt={t("ord.readyPhoto")} fill sizes="112px" unoptimized className="object-cover" />
+                    </button>
+                  ))}
+                </div>
               )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => { actions.ackOrderStep(o.id); toast({ text: t("ord.toast.acked") }); }}>
-                  <Check className="size-4" /> {t("ord.ack")}
+              {waiting.comment && <p className="mt-3 whitespace-pre-line rounded-xl bg-surface px-3 py-2 text-sm text-text/90">{waiting.comment}</p>}
+              <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+                <Button onClick={() => { if (actions.confirmReady(o.id)) toast({ text: t("ordx.toast.confirmed") }); }}>
+                  <Check className="size-4" /> {t("ordx.confirmReady")}
                 </Button>
-                <Button size="sm" variant="danger" onClick={() => setReject(true)}>{t("ord.reject")}</Button>
+                <Button variant="secondary" onClick={() => setReject(true)}>{t("ordx.rejectReady")}</Button>
               </div>
             </Card>
           )}
           {isSeller && (
-            <Card className="p-5">
+            <Card className="p-4 sm:p-5">
               <p className="text-xs font-bold uppercase text-faint">{t("ord.sellerPanel")}</p>
+              {o.status === "preparing" && o.readyRejection && (
+                <div className="mt-2 rounded-xl bg-rose-soft px-3 py-2 text-sm text-rose-deep">
+                  <p className="font-bold">{t("ordx.rejectedTitle")}</p>
+                  <p className="whitespace-pre-line">{o.readyRejection.reason}</p>
+                </div>
+              )}
               {nxt ? (
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Button onClick={() => setStep(true)}>
-                    {nxt === "ready" ? <Camera className="size-4" /> : nxt === "handed_over" ? <Truck className="size-4" /> : <Check className="size-4" />} {t(`ord.action.${nxt}`)}
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                  <Button onClick={() => setStep(true)} className="w-full sm:w-auto">
+                    {nxt === "ready" ? <Camera className="size-4" /> : nxt === "handed_over" ? <Truck className="size-4" /> : <Check className="size-4" />}{" "}
+                    {nxt === "ready" ? (o.readyRejection ? t("ordx.action.resend") : t("ordx.action.ready")) : t(`ord.action.${nxt}`)}
                   </Button>
-                  <span className="text-sm text-muted">{t(`ord.hint.${nxt}`)}</span>
+                  <span className="text-sm text-muted">{nxt === "ready" ? t("ordx.hint.ready") : t(`ord.hint.${nxt}`)}</span>
+                </div>
+              ) : waiting ? (
+                <div className="mt-2 space-y-2 text-sm">
+                  <p className="font-semibold text-ink">{t("ordx.waitingBuyer", { when: relative(o.readyRequestedAt!) })}</p>
+                  <p className="text-muted">{t("ordx.cantShipYet")}</p>
+                  {noResponse && <p className="rounded-xl bg-saffron-soft/60 px-3 py-2 text-ink">{t("ordx.noResponse", { count: waitDays })}</p>}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button size="sm" variant="soft" disabled={!canRemindReady(o)} onClick={() => { if (actions.remindReady(o.id)) toast({ text: t("ordx.toast.reminded") }); }}>
+                      <BellRing className="size-3.5" /> {t("ordx.remind")}
+                    </Button>
+                    {!canRemindReady(o) && <span className="self-center text-xs text-faint">{t("ordx.remindLimit", { hours: READY_REMIND_COOLDOWN_H })}</span>}
+                  </div>
                 </div>
               ) : (
-                <p className="mt-2 text-sm text-muted">{o.status === "cancelled" ? t("ord.closedCancelled") : o.status === "received" ? t("ord.closedReceived") : t("ord.buyerTurn")}</p>
+                <p className="mt-2 text-sm text-muted">{o.status === "cancelled" ? t("ord.closedCancelled") : o.status === "received" || o.status === "delivered" ? t("ordx.closedReceived") : t("ordx.buyerReceiptTurn")}</p>
               )}
-              {waiting && <p className="mt-3 text-xs font-semibold text-rust">{t("ord.awaitingBuyer")}</p>}
-              {buyer && (
-                <ButtonLink href={`/messages/${buyer.username}`} variant="ghost" size="sm" className="mt-3">
-                  <MessageCircle className="size-4" /> {t("ord.messageBuyer")}
-                </ButtonLink>
-              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {buyer && (
+                  <ButtonLink href={`/messages/${buyer.username}?order=${o.id}`} variant="ghost" size="sm">
+                    <MessageCircle className="size-4" /> {t("ord.messageBuyer")}
+                  </ButtonLink>
+                )}
+                {canSellerCancel(o.status) && (
+                  <Button variant="ghost" size="sm" className="text-rose-deep" onClick={() => setSellerCancel(true)}>
+                    <X className="size-4" /> {t("orders.cancel")}
+                  </Button>
+                )}
+              </div>
             </Card>
           )}
-          <Card className="p-5">
+          {o.status === "cancelled" && o.cancelReason && (
+            <Card className="p-4 text-sm">
+              <p className="font-bold text-ink">{o.cancelledBy === o.sellerId ? t("ordx.cancelledBySeller") : t("ordx.cancelledByBuyer")}</p>
+              <p className="mt-1 text-muted">{t("ord.reason")}: {o.cancelReason}</p>
+            </Card>
+          )}
+          <Card className="p-4 sm:p-5">
             <h2 className="mb-4 font-bold text-ink">{t("orders.timeline")}</h2>
             <OrderTimeline order={o} onPhoto={setViewPhoto} />
           </Card>
@@ -172,12 +226,17 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
         <aside className="space-y-4">
           <Card className="space-y-4 p-5 text-sm">
-            {o.readyPhoto && (
+            {photos.length > 0 && (
               <div>
-                <p className="text-xs font-bold uppercase text-faint">{t("ord.readyPhoto")}</p>
-                <button onClick={() => setViewPhoto(o.readyPhoto!)} className="relative mt-1 block aspect-square w-full overflow-hidden rounded-xl border border-line" aria-label={t("ord.openPhoto")}>
-                  <Image src={o.readyPhoto} alt={t("ord.readyPhoto")} fill sizes="300px" unoptimized className="object-cover" />
-                </button>
+                <p className="text-xs font-bold uppercase text-faint">{t("ordx.readyPhotos")}</p>
+                <div className={cn("mt-1 grid gap-2", photos.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
+                  {photos.map((src, i) => (
+                    <button key={i} onClick={() => setViewPhoto(src)} className="relative block aspect-square w-full overflow-hidden rounded-xl border border-line" aria-label={t("ord.openPhoto")}>
+                      <Image src={src} alt={t("ord.readyPhoto")} fill sizes="300px" unoptimized className="object-cover" />
+                    </button>
+                  ))}
+                </div>
+                {o.readyConfirmedAt && <p className="mt-1 text-xs font-semibold text-teal">{t("ordx.readyConfirmedAt", { date: date(o.readyConfirmedAt, "datetime") })}</p>}
               </div>
             )}
             {o.shipment ? (
@@ -190,7 +249,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
                     <button
                       onClick={() => { navigator.clipboard?.writeText(o.shipment!.number!).catch(() => {}); toast({ text: t("orders.copied") }); }}
                       aria-label={t("orders.copy")}
-                      className="rounded p-1 text-muted hover:text-ink"
+                      className="inline-flex size-9 items-center justify-center rounded-lg text-muted hover:bg-ink-soft hover:text-ink"
                     >
                       <Copy className="size-3.5" />
                     </button>
@@ -242,7 +301,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               </Link>
             </div>
             {isBuyer && (
-              <ButtonLink href={`/messages/${seller.username}`} variant="secondary" className="mt-3 w-full">
+              <ButtonLink href={`/messages/${seller.username}?order=${o.id}`} variant="secondary" className="mt-3 w-full">
                 <MessageCircle className="size-4" /> {t("orders.contactSeller")}
               </ButtonLink>
             )}
@@ -257,9 +316,10 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
                     toast({ text: t("orders.receivedToast") });
                   }}
                 >
-                  <Check className="size-4" /> {t("orders.received")}
+                  <Check className="size-4" /> {t("ordx.confirmReceived")}
                 </Button>
               )}
+              {canConfirmReceived(o.status) && <p className="text-xs text-muted">{t("ordx.receivedNote")}</p>}
               {canCancel(o.status) && (
                 <Button variant="danger" className="w-full" onClick={() => setCancel(true)}>
                   {t("orders.cancel")}
@@ -272,6 +332,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
       {isSeller && nxt && step && <SellerStepModal order={o} to={nxt} onClose={() => setStep(false)} />}
       <RejectModal open={reject} order={o} onClose={() => setReject(false)} />
+      {isSeller && <SellerCancelModal open={sellerCancel} order={o} onClose={() => setSellerCancel(false)} />}
       <PhotoViewer src={viewPhoto} onClose={() => setViewPhoto(null)} />
       <Modal
         open={cancel}
@@ -327,12 +388,12 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           <div className="space-y-3 p-5">
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
-                <button key={n} onClick={() => setReview({ ...review, rating: n })} aria-label={`${n}`} className={cn("size-9 rounded-lg text-sm font-bold", n <= review.rating ? "bg-saffron text-ink-deep" : "bg-ink-soft text-muted")}>
+                <button key={n} onClick={() => setReview((r) => (r ? { ...r, rating: n } : r))} aria-label={`${n}`} className={cn("size-11 rounded-lg text-sm font-bold", n <= review.rating ? "bg-saffron text-ink-deep" : "bg-ink-soft text-muted")}>
                   {n}
                 </button>
               ))}
             </div>
-            <Textarea rows={3} value={review.text} onChange={(e) => setReview({ ...review, text: e.target.value })} placeholder={t("learn.reviewPlaceholder")} aria-label={t("learn.reviewPlaceholder")} />
+            <Textarea rows={4} value={review.text} onChange={(e) => { const text = e.target.value; setReview((r) => (r ? { ...r, text } : r)); }} maxLength={2000} placeholder={t("learn.reviewPlaceholder")} aria-label={t("learn.reviewPlaceholder")} />
           </div>
         )}
       </Modal>

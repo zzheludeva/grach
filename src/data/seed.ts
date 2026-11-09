@@ -888,6 +888,30 @@ export function buildSeed(now = Date.now()) {
   // Marina also has one fresh order waiting for confirmation (seller-side demo)
   makeOrder({ buyerId: "u_olga", items: [["pr5", 1]], status: "pending", createdDaysAgo: 0.1, delivery: "courier", country: "RU", shipping: 600, address: addressRU("Ольга Ленская", "Москва") });
 
+  // Readiness confirmation demos. Explicit ids so they can also be added to existing demo databases (store migration v6).
+  function readyDemo(id: string, base: Parameters<typeof makeOrder>[0], requestedDaysAgo: number, confirmed: boolean, comment: string) {
+    const keep = orderSeq;
+    makeOrder({ ...base, status: "preparing" });
+    orderSeq = keep;
+    const o = orders.pop()!;
+    const seq = id.slice(1);
+    const reqAt = new Date(now - requestedDaysAgo * DAY).toISOString();
+    const photos = [o.items[0].image];
+    const history: Order["history"] = [...o.history, { status: "ready", from: "preparing", at: reqAt, by: o.sellerId, photo: photos[0], photos, comment, ack: confirmed ? "confirmed" : "pending" }];
+    const confirmedAt = new Date(now - requestedDaysAgo * DAY + 5 * HOUR).toISOString();
+    if (confirmed) history.push({ status: "ready", at: confirmedAt, by: o.buyerId, kind: "readyConfirmed" });
+    orders.push({
+      ...o, id, number: `RM-${seq}`, groupId: `g${seq}`, status: "ready", history,
+      readyPhoto: photos[0], readyPhotos: photos, readyRequestedAt: reqAt, readyConfirmedAt: confirmed ? confirmedAt : undefined,
+    });
+  }
+  // Marina (seller): the buyer hasn't answered for 4 days → "no response" handling.
+  readyDemo("o2001", { buyerId: "u_nina", items: [["pr1", 1]], status: "preparing", createdDaysAgo: 25, delivery: "post", country: "RU", shipping: 350, address: addressRU(users.find((u) => u.id === "u_nina")!.name, "Екатеринбург") }, 4, false, "Чаша готова, глазурь легла ровно.");
+  // Marina (seller): readiness confirmed → can ship.
+  readyDemo("o2002", { buyerId: "u_pavel", items: [["pr2", 1]], status: "preparing", createdDaysAgo: 12, delivery: "post", country: "RU", shipping: 350, address: addressRU(users.find((u) => u.id === "u_pavel")!.name, "Калининград") }, 1.5, true, "Всё готово, упакую в двойную коробку.");
+  // Marina (buyer): a master asks her to confirm readiness.
+  readyDemo("o2003", { buyerId: "u_marina", items: [["pr12", 1]], status: "preparing", createdDaysAgo: 6, delivery: "post", country: "RU", shipping: 350, address: addressRU(users.find((u) => u.id === "u_marina")!.name, "Санкт-Петербург") }, 0.4, false, "Посмотрите, пожалуйста, всё ли так, как вы хотели.");
+
   /* ---------------- Personal state ---------------- */
   const favorites: Favorite[] = [
     { userId: "u_anya", type: "post", id: "p6", at: ago(3) },

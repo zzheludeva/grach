@@ -3,8 +3,9 @@ import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowLeft, Ban, CalendarPlus, Copy, ExternalLink, MapPin, MonitorPlay, Pencil, Send, Trash, UserMinus, Users } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, CalendarPlus, Copy, ExternalLink, MapPin, MessageCircle, MonitorPlay, Pencil, Send, Trash, UserMinus, UserPlus, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { bookingsOf, seatsLeft, seatsTaken, sessionAudience, sessionPhase, sessionsOf } from "@/lib/workshops";
 import type { WorkshopSession } from "@/lib/types";
@@ -13,6 +14,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { SessionModal } from "@/components/seller/SessionModal";
+import { AddParticipantModal } from "@/components/seller/AddParticipantModal";
 import { userById } from "@/lib/selectors";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ export default function ManageWorkshop({ params }: { params: Promise<{ id: strin
   const w = d.workshops.find((x) => x.id === id);
   const [modal, setModal] = useState<{ session?: WorkshopSession; base?: WorkshopSession; key: number } | null>(null);
   const [cancel, setCancel] = useState<WorkshopSession | null>(null);
+  const [adding, setAdding] = useState<WorkshopSession | null>(null);
   if (!w) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/dashboard/workshops">{t("nav.myWorkshops")}</ButtonLink>} />;
   if (w.hostId !== meId) return <EmptyState title={t("common.forbidden")} action={<ButtonLink href={`/learn/workshop/${id}`}>{t("ev.form.openPage")}</ButtonLink>} />;
   const all = sessionsOf(d, w.id);
@@ -35,9 +38,7 @@ export default function ManageWorkshop({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href="/dashboard/workshops" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-        <ArrowLeft className="size-4 rtl:rotate-180" /> {t("nav.myWorkshops")}
-      </Link>
+      <BackLink fallback="/dashboard/workshops" fallbackLabel={t("nav.myWorkshops")} className="mb-3" />
       <Card className="mb-6 flex flex-col gap-4 p-4 sm:flex-row">
         <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden rounded-2xl bg-line/40 sm:w-56">
           {w.cover && <Image src={w.cover} alt="" fill sizes="224px" unoptimized={w.cover.startsWith("data:")} className="object-cover" />}
@@ -105,7 +106,7 @@ export default function ManageWorkshop({ params }: { params: Promise<{ id: strin
                             </p>
                             <p className="nums text-sm text-muted">{s.price ? money(s.price) : t("learn.free")}</p>
                           </div>
-                          <div className="w-40 shrink-0">
+                          <div className="w-full shrink-0 sm:w-40">
                             <p className="nums text-sm font-semibold text-ink"><Users className="me-1 inline size-4" />{t("ev.mine.seats", { taken, total: s.seatsTotal })}</p>
                             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-teal" style={{ width: `${Math.min(100, (taken / s.seatsTotal) * 100)}%` }} /></div>
                             <p className="mt-0.5 text-xs text-faint">{t("workshop.seatsLeft", { count: seatsLeft(d, s) })}</p>
@@ -116,13 +117,26 @@ export default function ManageWorkshop({ params }: { params: Promise<{ id: strin
                             {bookings.map((b) => {
                               const u = userById(d, b.userId);
                               return (
-                                <li key={b.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                                  {u && <Avatar name={u.name} color={u.avatarColor} size={28} />}
-                                  <span className="min-w-0 flex-1 truncate font-semibold text-ink">{u?.name ?? "—"}</span>
+                                <li key={b.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
+                                  {u && <Avatar name={u.name} color={u.avatarColor} size={28} href={`/profile/${u.username}`} />}
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate font-semibold text-ink">{u?.name ?? "—"}</span>
+                                    {b.addedBy && <span className="block text-[11px] text-faint">{t("wsx.addedByYou")}</span>}
+                                  </span>
                                   <span className="nums text-muted">{t("ws.seatsN", { count: b.seats })}</span>
                                   <span className="hidden text-xs text-faint sm:inline">{relative(b.at)}</span>
+                                  {u && (
+                                    <Link
+                                      href={`/messages/${u.username}?workshop=${w.id}&session=${s.id}`}
+                                      className="inline-flex size-9 items-center justify-center rounded-lg text-muted hover:bg-ink-soft hover:text-ink"
+                                      aria-label={t("wsx.messageParticipant", { name: u.name })}
+                                      title={t("wsx.messageParticipantShort")}
+                                    >
+                                      <MessageCircle className="size-4" />
+                                    </Link>
+                                  )}
                                   {g.ph === "upcoming" && (
-                                    <button onClick={() => { actions.removeBooking(b.id); toast({ text: t("ws.toast.bookingRemoved"), tone: "info" }); }} className="rounded-md p-1 text-faint hover:text-rose-deep" aria-label={t("ws.manage.removeBooking")} title={t("ws.manage.removeBooking")}>
+                                    <button onClick={() => { actions.removeBooking(b.id); toast({ text: t("ws.toast.bookingRemoved"), tone: "info" }); }} className="inline-flex size-9 items-center justify-center rounded-lg text-faint hover:bg-rose-soft hover:text-rose-deep" aria-label={t("ws.manage.removeBooking")} title={t("ws.manage.removeBooking")}>
                                       <UserMinus className="size-4" />
                                     </button>
                                   )}
@@ -135,6 +149,7 @@ export default function ManageWorkshop({ params }: { params: Promise<{ id: strin
                         <div className="mt-3 flex flex-wrap gap-2">
                           {g.ph === "upcoming" && (
                             <>
+                              <Button size="sm" onClick={() => setAdding(s)} disabled={w.status === "archived"}><UserPlus className="size-3.5" /> {t("wsx.add.button")}</Button>
                               <Button size="sm" variant="soft" onClick={() => setModal({ session: s, key: Date.now() })}><Pencil className="size-3.5" /> {t("common.edit")}</Button>
                               <Button size="sm" variant="ghost" className="text-rose-deep" onClick={() => setCancel(s)}><Ban className="size-3.5" /> {t("ws.session.cancel")}</Button>
                             </>
@@ -151,6 +166,7 @@ export default function ManageWorkshop({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
+      {adding && <AddParticipantModal session={adding} onClose={() => setAdding(null)} />}
       {modal && <SessionModal key={modal.key} open onClose={() => setModal(null)} workshop={w} session={modal.session} base={modal.base} />}
 
       <Modal

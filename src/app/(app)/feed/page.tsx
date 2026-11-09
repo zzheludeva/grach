@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Compass, Plus, Shuffle } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { useQueryState } from "@/lib/nav-history";
 import { useI18n } from "@/i18n/I18nProvider";
 import { buildFeed, unexploredCategories, type FeedMode } from "@/lib/recommend";
 import { CATEGORIES, categoryColor } from "@/i18n/content";
@@ -20,8 +21,11 @@ export default function FeedPage() {
   const { t, cat, num, date } = useI18n();
   const { openComposer } = useShell();
   const d = state!.data;
-  const [mode, setMode] = useState<FeedMode>("foryou");
-  const [category, setCategory] = useState<CategoryId | null>(null);
+  // Feed mode and category live in the URL: returning from a post restores them.
+  const [mode, setMode] = useQueryState<FeedMode>("mode", "foryou", ["foryou", "following", "popular", "new"]);
+  const [catQ, setCatQ] = useQueryState<CategoryId | "">("cat", "", ["", ...CATEGORIES.map((c) => c.id)]);
+  const category = catQ || null;
+  const setCategory = (c: CategoryId | null) => setCatQ(c ?? "");
   const [limit, setLimit] = useState(12);
 
   const feed = useMemo(() => buildFeed(d, meId, mode, category), [d, meId, mode, category]);

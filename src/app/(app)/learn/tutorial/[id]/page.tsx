@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Circle, Clock, Lock, Signal, Pencil, PlayCircle, ExternalLink } from "lucide-react";
 import { techniqueName } from "@/i18n/content";
 import { useStore } from "@/lib/store";
+import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { rating, userById } from "@/lib/selectors";
 import { Avatar, Badge, Card, DemoNote, EmptyState, Stars, Textarea } from "@/components/ui/primitives";
@@ -41,15 +42,13 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <Link href={tut.authorId === meId ? "/dashboard/tutorials" : "/learn"} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink">
-          <ArrowLeft className="size-4 rtl:rotate-180" /> {tut.authorId === meId ? t("nav.myTutorials") : t("nav.learn")}
-        </Link>
+        <BackLink fallback={tut.authorId === meId ? "/dashboard/tutorials" : "/learn"} fallbackLabel={tut.authorId === meId ? t("nav.myTutorials") : t("nav.learn")} />
         {tut.authorId === meId && (
           <ButtonLink href={`/dashboard/tutorials/${tut.id}`} size="sm" variant="soft"><Pencil className="size-3.5" /> {t("common.edit")}</ButtonLink>
         )}
       </div>
       {tut.status !== "published" && <DemoNote className="mb-4">{tut.status === "draft" ? t("tut.page.draft") : t("tut.page.hidden")}</DemoNote>}
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">
         <div className="min-w-0">
           <div className="relative aspect-[16/9] overflow-hidden rounded-3xl bg-line">
             {tut.cover && <Image src={tut.cover} alt={tut.title} fill priority sizes="(max-width: 1024px) 100vw, 640px" unoptimized={tut.cover.startsWith("data:")} className="object-cover" />}
