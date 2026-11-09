@@ -119,7 +119,7 @@ function index(c: Ctx, q: string): SearchItem[] {
   }
   for (const p of d.products) {
     if (p.status !== "published") continue;
-    const s = score(q, p.title, `${p.summary} ${p.description} ${p.materials.join(" ")} ${user(p.sellerId)?.name ?? ""}`, p.category, p.technique);
+    const s = score(q, p.title, `${p.summary} ${p.description} ${p.story} ${p.materials.join(" ")} ${user(p.sellerId)?.name ?? ""}`, p.category, p.technique);
     if (q && !s) continue;
     out.push({ type: "product", id: p.id, title: p.title, createdAt: p.createdAt, score: s, popularity: p.views, saves: favCount(d, "product", p.id), price: p.price, cat: p.category, lang: p.lang, country: p.shipsFrom, tech: p.technique, ref: p });
   }

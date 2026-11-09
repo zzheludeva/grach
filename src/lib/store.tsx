@@ -31,6 +31,7 @@ import { pendingReady, canConfirmReceived, canRemindReady, canSellerCancel, vali
 import { DAY, uid } from "./utils";
 import { region } from "./regions";
 import { detectLocale } from "@/i18n/config";
+import { cleanStory, mainDescription } from "./product-text";
 import { canCancel } from "./orders";
 
 /**
@@ -42,7 +43,7 @@ import { canCancel } from "./orders";
 const STORAGE_KEY = "remeslo:v3";
 
 export interface AppState {
-  version: 6;
+  version: 7;
   sessionUserId: string | null;
   deviceLang: Locale;
   langSuggested: boolean;
@@ -57,7 +58,7 @@ function defaultSettings(country: CountryCode, lang: Locale, city?: string): Set
 
 function initialState(lang: Locale): AppState {
   return {
-    version: 6,
+    version: 7,
     sessionUserId: null,
     deviceLang: lang,
     langSuggested: true,
@@ -89,7 +90,8 @@ function useBuildStore() {
     if (s && (s.version as number) === 3) s = migrateV3(s);
     if (s && (s.version as number) === 4) s = migrateV4(s);
     if (s && (s.version as number) === 5) s = migrateV5(s);
-    if (!s || s.version !== 6) s = initialState(detectLocale(navigator.languages));
+    if (s && (s.version as number) === 6) s = migrateV6(s);
+    if (!s || s.version !== 7) s = initialState(detectLocale(navigator.languages));
     setState(s);
     loaded.current = true;
   }, []);
@@ -983,7 +985,7 @@ function migrateV3(old: AppState): AppState {
   });
   return {
     ...old,
-    version: 4 as unknown as 6, // intermediate step, finished by migrateV4
+    version: 4 as unknown as 7, // intermediate step, finished by migrateV4
     data: {
       ...d,
       posts: d.posts.map((p) => ({ ...p, technique: p.technique ?? techOf.get(p.id) })),
@@ -1004,7 +1006,7 @@ function migrateV3(old: AppState): AppState {
 function migrateV4(old: AppState): AppState {
   const fresh = buildSeed();
   const d = old.data as SeedData & { sessions?: WorkshopSession[] };
-  if (d.sessions) return { ...old, version: 5 as unknown as 6 };
+  if (d.sessions) return { ...old, version: 5 as unknown as 7 };
   const legacy = d.workshops as unknown as LegacyWorkshop[];
   const legacyEnrollments = d.enrollments as unknown as { userId: string; workshopId: string; at: string }[];
   const enrollments = legacyEnrollments.map(legacyEnrollment);
@@ -1024,7 +1026,7 @@ function migrateV4(old: AppState): AppState {
   const draft = fresh.tutorials.find((x) => x.id === "t10");
   return {
     ...old,
-    version: 5 as unknown as 6, // finished by migrateV5
+    version: 5 as unknown as 7, // finished by migrateV5
     data: {
       ...d,
       workshops,
@@ -1062,7 +1064,20 @@ function migrateV5(old: AppState): AppState {
   const users = new Set(old.data.users.map((u) => u.id));
   const products = new Set(old.data.products.map((p) => p.id));
   const extra = fresh.orders.filter((o) => o.id.startsWith("o2") && !orders.some((x) => x.id === o.id) && users.has(o.buyerId) && users.has(o.sellerId) && o.items.every((i) => products.has(i.productId)));
-  return { ...old, version: 6, data: { ...old.data, orders: [...orders, ...extra] } };
+  return { ...old, version: 6 as unknown as 7, data: { ...old.data, orders: [...orders, ...extra] } }; // finished by migrateV6
+}
+
+/**
+ * v6 → v7: products get one main description. The old long description is folded into `summary`
+ * (nothing is lost); a story that only repeated the description is cleared. The story is never filled
+ * from the description.
+ */
+function migrateV6(old: AppState): AppState {
+  const products = old.data.products.map((p) => {
+    const summary = mainDescription(p.summary, p.description);
+    return { ...p, summary, story: cleanStory(p.story, p.summary, p.description), description: "" };
+  });
+  return { ...old, version: 7, data: { ...old.data, products } };
 }
 
 function bumpCat(d: SeedData, userId: string, cat: string, by: number) {

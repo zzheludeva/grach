@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Search, Truck } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useQueryFlag, useQueryState } from "@/lib/nav-history";
+import { FavoritesLink } from "@/components/common/FavoritesLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES, categorySearchTerms } from "@/i18n/content";
 import { Chip, EmptyState, Input, PageHeader, Select } from "@/components/ui/primitives";
@@ -48,7 +49,7 @@ export default function Market() {
 
   return (
     <div>
-      <PageHeader title={t("market.title")} subtitle={t("market.subtitle")} />
+      <PageHeader title={t("market.title")} subtitle={t("market.subtitle")} actions={<FavoritesLink type="product" />} />
       <div className="mb-5 space-y-3">
         <div className="flex flex-wrap gap-2">
           <div className="relative min-w-0 flex-1 basis-64">

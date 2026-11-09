@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Compass, Plus, Shuffle } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useQueryState } from "@/lib/nav-history";
+import { FavoritesLink } from "@/components/common/FavoritesLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { buildFeed, unexploredCategories, type FeedMode } from "@/lib/recommend";
 import { CATEGORIES, categoryColor } from "@/i18n/content";
@@ -66,7 +67,7 @@ export default function FeedPage() {
           </div>
         </section>
 
-        <div className="sticky top-16 z-20 lg:top-28 -mx-4 mb-5 space-y-3 bg-bg/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-16 z-20 lg:top-28 -mx-4 mb-5 flex flex-wrap items-center justify-between gap-3 bg-bg/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <Tabs
             value={mode}
             onChange={(m) => {
@@ -81,7 +82,8 @@ export default function FeedPage() {
             ]}
             className="w-fit"
           />
-          <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
+          <FavoritesLink type="post" />
+          <div className="scrollbar-none -mx-1 flex w-full gap-2 overflow-x-auto px-1 pb-0.5">
             <Chip active={!category} onClick={() => pickCategory(null)}>
               {t("feed.all")}
             </Chip>
@@ -158,25 +160,6 @@ export default function FeedPage() {
             </div>
           </Card>
         )}
-        {suggested.length > 0 && (
-          <Card className="p-4">
-            <p className="mb-3 text-sm font-bold text-ink">{t("feed.whoToFollow")}</p>
-            <div className="space-y-3">
-              {suggested.map((u) => (
-                <div key={u.id} className="flex items-center gap-2.5">
-                  <Avatar name={u.name} color={u.avatarColor} size={36} href={`/profile/${u.username}`} />
-                  <Link href={`/profile/${u.username}`} className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-ink hover:underline">{u.name}</span>
-                    <span className="block truncate text-xs text-muted">
-                      {u.interests.slice(0, 2).map(cat).join(" · ")} · {num(followersOf(d, u.id).length)}
-                    </span>
-                  </Link>
-                  <FollowButton userId={u.id} className="h-7 px-2.5 text-xs" />
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
         <Card className="p-4">
           <p className="text-sm font-bold text-ink">{t("feed.upcoming")}</p>
           <div className="mt-3 space-y-3">
@@ -197,6 +180,25 @@ export default function FeedPage() {
               ))}
           </div>
         </Card>
+        {suggested.length > 0 && (
+          <Card className="p-4">
+            <p className="mb-3 text-sm font-bold text-ink">{t("feed.whoToFollow")}</p>
+            <div className="space-y-3">
+              {suggested.map((u) => (
+                <div key={u.id} className="flex items-center gap-2.5">
+                  <Avatar name={u.name} color={u.avatarColor} size={36} href={`/profile/${u.username}`} />
+                  <Link href={`/profile/${u.username}`} className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-ink hover:underline">{u.name}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {u.interests.slice(0, 2).map(cat).join(" · ")} · {num(followersOf(d, u.id).length)}
+                    </span>
+                  </Link>
+                  <FollowButton userId={u.id} className="h-7 px-2.5 text-xs" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
       </aside>
     </div>
   );

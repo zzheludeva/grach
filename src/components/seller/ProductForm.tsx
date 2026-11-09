@@ -1,4 +1,5 @@
 "use client";
+import { mainDescription } from "@/lib/product-text";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash } from "lucide-react";
@@ -24,7 +25,7 @@ export interface ProductPrefill {
   materials?: string[];
 }
 
-type Errors = Partial<Record<"title" | "images" | "summary" | "description" | "price" | "stock" | "makeDays" | "shipsTo" | "shipCost", string>>;
+type Errors = Partial<Record<"title" | "images" | "summary" | "price" | "stock" | "makeDays" | "shipsTo" | "shipCost", string>>;
 
 export function ProductForm({ product, prefill, onSaved }: { product?: Product; prefill?: ProductPrefill; onSaved?: (id: string) => void }) {
   const { t, cat, locale } = useI18n();
@@ -33,8 +34,8 @@ export function ProductForm({ product, prefill, onSaved }: { product?: Product; 
   const toast = useToast();
   const [title, setTitle] = useState(product?.title ?? prefill?.title ?? "");
   const [images, setImages] = useState<string[]>(product?.images ?? prefill?.images ?? []);
-  const [summary, setSummary] = useState(product?.summary ?? "");
-  const [description, setDescription] = useState(product?.description ?? prefill?.description ?? "");
+  // One main description (summary). An old separate description, if any, is folded into it.
+  const [summary, setSummary] = useState(product ? mainDescription(product.summary, product.description) : prefill?.description ?? "");
   const [story, setStory] = useState(product?.story ?? "");
   const [category, setCategory] = useState<CategoryId>(product?.category ?? prefill?.category ?? "ceramics");
   const [technique, setTechnique] = useState(product?.technique ?? prefill?.technique ?? "");
@@ -63,7 +64,6 @@ export function ProductForm({ product, prefill, onSaved }: { product?: Product; 
     if (publishing) {
       if (!images.length) e.images = t("sell.v.photo");
       if (!summary.trim()) e.summary = t("sell.v.summary");
-      if (!description.trim()) e.description = t("sell.v.description");
       if (!(Number(price) > 0)) e.price = t("sell.v.price");
       if (saleType === "ready" && !(Number(stock) >= 0 && stock.trim() !== "")) e.stock = t("sell.v.stock");
       if (saleType !== "ready" && !(Number(makeDays) > 0)) e.makeDays = t("sell.v.makeDays");
@@ -88,7 +88,7 @@ export function ProductForm({ product, prefill, onSaved }: { product?: Product; 
       title: title.trim(),
       images,
       summary: summary.trim(),
-      description: description.trim(),
+      description: "",
       story: story.trim(),
       category,
       technique: technique || undefined,
@@ -166,13 +166,10 @@ export function ProductForm({ product, prefill, onSaved }: { product?: Product; 
         <Card className="space-y-4 p-5">
           <h2 className="text-lg font-bold text-ink">{t("sell.form.details")}</h2>
           <Field label={t("sell.form.summary")} hint={t("sell.form.summaryHint")} error={errors.summary}>
-            {(id, d) => <Input id={id} aria-describedby={d} aria-invalid={!!errors.summary} value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={160} />}
+            {(id, d) => <Textarea id={id} aria-describedby={d} aria-invalid={!!errors.summary} value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} maxLength={3000} />}
           </Field>
-          <Field label={t("sell.form.description")} error={errors.description}>
-            {(id, d) => <Textarea id={id} aria-describedby={d} aria-invalid={!!errors.description} value={description} onChange={(e) => setDescription(e.target.value)} rows={5} maxLength={3000} />}
-          </Field>
-          <Field label={`${t("sell.form.story")} (${t("common.optional")})`}>
-            {(id) => <Textarea id={id} value={story} onChange={(e) => setStory(e.target.value)} rows={3} maxLength={1500} />}
+          <Field label={`${t("sell.form.story")} (${t("common.optional")})`} hint={t("sell.form.storyHint")}>
+            {(id, d) => <Textarea id={id} aria-describedby={d} value={story} onChange={(e) => setStory(e.target.value)} rows={4} maxLength={1500} />}
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t("sell.form.materials")} hint={t("sell.form.materialsHint")}>

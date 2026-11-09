@@ -16,6 +16,10 @@ import ruExt4 from "./ext4/ru";
 import enExt4 from "./ext4/en";
 import ptBRExt4 from "./ext4/pt-BR";
 import esExt4 from "./ext4/es";
+import ruExt5 from "./ext5/ru";
+import enExt5 from "./ext5/en";
+import ptBRExt5 from "./ext5/pt-BR";
+import esExt5 from "./ext5/es";
 
 /** Deep-merges feature dictionaries into the base one (same keys, same `t()`; no parallel mechanism). */
 function merge(base: Dict, ext: Dict): Dict {
@@ -30,9 +34,9 @@ function merge(base: Dict, ext: Dict): Dict {
 
 /** Add a language: create a dictionary file and register it here (+ in i18n/config LOCALES). */
 export const messages: Record<Locale, Dict & { langSuggest?: { text?: string; switch?: string } }> = {
-  ru: merge(merge(merge(ru, ruExt), ruExt3), ruExt4) as never,
-  en: merge(merge(merge(en, enExt), enExt3), enExt4) as never,
-  "pt-BR": merge(merge(merge(ptBR, ptBRExt), ptBRExt3), ptBRExt4) as never,
-  es: merge(merge(merge(es, esExt), esExt3), esExt4) as never,
+  ru: merge(merge(merge(merge(ru, ruExt), ruExt3), ruExt4), ruExt5) as never,
+  en: merge(merge(merge(merge(en, enExt), enExt3), enExt4), enExt5) as never,
+  "pt-BR": merge(merge(merge(merge(ptBR, ptBRExt), ptBRExt3), ptBRExt4), ptBRExt5) as never,
+  es: merge(merge(merge(merge(es, esExt), esExt3), esExt4), esExt5) as never,
 };
 export type Messages = Dict;

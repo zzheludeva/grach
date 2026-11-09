@@ -2,6 +2,7 @@
 import { useMemo } from "react";
 import { CalendarPlus, FilePlus2, MapPin } from "lucide-react";
 import { useQueryFlag, useQueryState } from "@/lib/nav-history";
+import { FavoritesLink } from "@/components/common/FavoritesLink";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES } from "@/i18n/content";
@@ -74,13 +75,14 @@ export default function Learn() {
         title={t("learn.title")}
         subtitle={t("learn.subtitle")}
         actions={
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+          <div className="grid w-full grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap">
             <ButtonLink href="/learn/new/workshop" variant="secondary" size="sm" className="min-h-10">
               <CalendarPlus className="size-4" /> {t("learnx.createWorkshop")}
             </ButtonLink>
             <ButtonLink href="/learn/new/tutorial" variant="secondary" size="sm" className="min-h-10">
               <FilePlus2 className="size-4" /> {t("learnx.createTutorial")}
             </ButtonLink>
+            <FavoritesLink type={tab === "workshops" ? "workshop" : "tutorial"} className="justify-center min-[400px]:col-span-2 sm:col-span-1" />
           </div>
         }
       />

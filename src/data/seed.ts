@@ -23,6 +23,7 @@ import type {
   Project,
 } from "@/lib/types";
 import { DAY, HOUR, hashStr } from "@/lib/utils";
+import { cleanStory, mainDescription } from "@/lib/product-text";
 import { legacyEnrollment, splitLegacy, type LegacyWorkshop } from "@/lib/workshops";
 
 /* All dates are relative to the moment the demo database is first created, so the
@@ -411,6 +412,10 @@ export function buildSeed(now = Date.now()) {
     p: Omit<Product, "images" | "createdAt" | "status" | "saleType"> & Partial<Pick<Product, "status" | "saleType">> & { images: string[]; d: number },
   ): Product => {
     const { d, images, ...rest } = p;
+    // One main description: the short line plus the details; the story stays separate.
+    rest.summary = mainDescription(rest.summary, rest.description);
+    rest.story = cleanStory(rest.story, rest.summary, rest.description);
+    rest.description = "";
     return {
       status: "published",
       saleType: rest.availability === "made_to_order" ? "to_order" : "ready",

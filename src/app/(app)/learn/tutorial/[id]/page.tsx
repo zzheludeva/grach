@@ -2,7 +2,7 @@
 import { use, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Circle, Clock, Lock, Signal, Pencil, PlayCircle, ExternalLink } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Download, Loader2, Lock, Signal, Pencil, PlayCircle, ExternalLink } from "lucide-react";
 import { techniqueName } from "@/i18n/content";
 import { useStore } from "@/lib/store";
 import { BackLink } from "@/components/common/BackLink";
@@ -25,6 +25,7 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
   const [done, setDone] = useState<number[]>([]);
   const [buy, setBuy] = useState(false);
   const [rev, setRev] = useState({ rating: 5, text: "" });
+  const [pdfBusy, setPdfBusy] = useState(false);
   useEffect(() => {
     actions.viewTutorial(id);
     // one view per visit
@@ -38,6 +39,37 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
   const r = rating(tut.reviews);
   const reviewed = tut.reviews.some((x) => x.authorId === meId);
   const visibleSteps = owned ? tut.steps : tut.steps.slice(0, 1);
+
+  /** PDF of the material's content only (no page UI). Paid materials: the full PDF is available once owned. */
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const { exportTutorialPdf, pdfFileName } = await import("@/lib/pdf/tutorial-pdf");
+      const meta = [cat(tut.category), tut.direction, tut.technique ? techniqueName(tut.technique, locale) : "", t(`level.${tut.level}`), t("learn.minutes", { count: tut.durationMin })].filter(Boolean).join(" · ");
+      await exportTutorialPdf(
+        tut,
+        visibleSteps,
+        {
+          brand: t("brand.name"),
+          meta,
+          author: t("pdf.author", { name: author.name }),
+          materials: t("learn.materialsNeeded"),
+          steps: t("learn.steps"),
+          gallery: t("pdf.gallery"),
+          video: t("tut.page.watch"),
+          links: t("pdf.links"),
+          page: (n, total) => t("pdf.page", { n, total }),
+          source: t("pdf.source", { date: new Date().toLocaleDateString(locale) }),
+        },
+        pdfFileName(tut.title),
+      );
+      toast({ text: t("pdf.done") });
+    } catch {
+      toast({ text: t("pdf.error"), tone: "error" });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -186,6 +218,13 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
             <div className="mt-4 flex flex-col gap-2">
               {!owned && <Button onClick={() => setBuy(true)}>{t("learn.buy")}</Button>}
               <SaveButton type="tutorial" id={tut.id} variant="button" className="justify-center" />
+              {owned ? (
+                <Button variant="secondary" onClick={downloadPdf} disabled={pdfBusy} className="justify-center" aria-busy={pdfBusy}>
+                  {pdfBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {pdfBusy ? t("pdf.busy") : t("pdf.download")}
+                </Button>
+              ) : (
+                <p className="text-center text-xs text-muted">{t("pdf.afterPurchase")}</p>
+              )}
             </div>
             <div className="mt-5">
               <p className="mb-2 text-sm font-bold text-ink">{t("learn.materialsNeeded")}</p>

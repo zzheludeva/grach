@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useQueryState } from "@/lib/nav-history";
 import { Search } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -16,12 +16,11 @@ const TYPES: FavoriteType[] = ["post", "tutorial", "product", "workshop"];
 const SECTION: Record<FavoriteType, string> = { post: "/feed", tutorial: "/learn", product: "/market", workshop: "/learn?tab=workshops" };
 
 export default function Favorites() {
-  const sp = useSearchParams();
-  const initial = (TYPES.includes(sp.get("tab") as FavoriteType) ? sp.get("tab") : "post") as FavoriteType;
   const { state, meId } = useStore();
   const { t, cat } = useI18n();
   const d = state!.data;
-  const [tab, setTab] = useState<FavoriteType>(initial);
+  // The tab comes from the URL, so sections can link straight to their category (/favorites?tab=product).
+  const [tab, setTab] = useQueryState<FavoriteType>("tab", "post", TYPES);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<CategoryId | "">("");
 
@@ -43,10 +42,7 @@ export default function Favorites() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Tabs
           value={tab}
-          onChange={(v) => {
-            setTab(v);
-            history.replaceState(null, "", `?tab=${v}`);
-          }}
+          onChange={(v) => setTab(v)}
           items={TYPES.map((ty) => ({ value: ty, label: t(`favorites.tab.${ty}`), count: counts[ty] }))}
         />
         <div className="flex min-w-0 flex-1 basis-72 gap-2">

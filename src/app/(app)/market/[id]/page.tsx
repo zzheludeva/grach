@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Hammer, MessageCircle, Minus, Plus, Ruler, Truck, MapPin, ShoppingCart, PackageCheck, Pencil, Brush, ListChecks, Tag } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { cleanStory, mainDescription } from "@/lib/product-text";
 import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { canShipTo, cartOf, rating, userById } from "@/lib/selectors";
@@ -41,6 +42,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const ships = canShipTo(p, settings.country);
   const inCart = cartOf(d, meId).find((c) => c.productId === p.id);
   const isMine = p.sellerId === meId;
+  const story = cleanStory(p.story, p.summary, p.description);
   const max = p.availability === "in_stock" ? p.stock : 10;
   const reviews = d.productReviews.filter((r) => r.productId === p.id);
   const r = rating(reviews);
@@ -104,8 +106,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
           )}
           <Price value={p.price} className="mt-4 flex text-3xl font-bold text-ink" />
           {p.price.currency !== settings.currency && <p className="mt-1 text-xs text-muted">{t("money.noConversion")}</p>}
-          <p className="mt-4 text-[15px] leading-relaxed text-text/90" lang={p.lang}>
-            {p.summary}
+          <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={p.lang}>
+            {mainDescription(p.summary, p.description)}
           </p>
           <div className="mt-1">
             <TranslateBar contentLang={p.lang} state={tr} />
@@ -268,23 +270,21 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
-        <Card className="overflow-hidden">
-          <div className="grout px-5 py-4">
-            <p className="font-display text-2xl text-white">{t("product.story")}</p>
-          </div>
-          <div className="space-y-4 p-5">
-            {p.story && (
-              <p className="text-[15px] italic leading-relaxed text-text/90" lang={p.lang}>
-                “{p.story}”
+      <div className={cn("mt-10 grid gap-6 [&>*]:min-w-0", story && "lg:grid-cols-[1.4fr_1fr]")}>
+        {/* The story is its own block: idea, inspiration, process. Hidden when the maker hasn't told it — never filled with the description. */}
+        {story && (
+          <Card className="overflow-hidden">
+            <div className="grout px-5 py-4">
+              <p className="font-display text-2xl text-white">{t("product.story")}</p>
+            </div>
+            <div className="space-y-4 p-5">
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={p.lang}>
+                {story}
               </p>
-            )}
-            <p className="text-[15px] leading-relaxed text-text/85" lang={p.lang}>
-              {p.description}
-            </p>
-            <p className="text-xs text-faint">{t("translate.original", { lang: langName(p.lang) })}</p>
-          </div>
-        </Card>
+              <p className="text-xs text-faint">{t("translate.original", { lang: langName(p.lang) })}</p>
+            </div>
+          </Card>
+        )}
         <Card className="p-5">
           <p className="mb-3 text-xs font-bold uppercase tracking-wider text-faint">{t("product.aboutMaker")}</p>
           <div className="flex items-center gap-3">

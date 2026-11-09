@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, Suspense, useContext, useEffect, useState } from "react";
-import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Bookmark, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays, BookOpen, Check, Settings as SettingsIcon } from "lucide-react";
+import { Plus, Search, LogOut, UserRound, Users, Repeat, Languages, Package, MessageCircle, Pencil, FolderKanban, Store, CalendarDays, BookOpen, Check, Settings as SettingsIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { MAIN_NAV, USER_NAV } from "./nav";
@@ -140,7 +140,6 @@ function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; 
           <MenuItem icon={<BookOpen />} onClick={() => go(`/dashboard/tutorials`, close)}>{t("nav.myTutorials")}</MenuItem>
           <div className="md:hidden">
             <div className="my-1 h-px bg-line" />
-            <MenuItem icon={<Bookmark />} onClick={() => go(`/favorites`, close)}>{t("nav.favorites")}</MenuItem>
             <MenuItem icon={<Package />} onClick={() => go(`/orders`, close)}>{t("nav.orders")}</MenuItem>
             <MenuItem icon={<MessageCircle />} onClick={() => go(`/messages`, close)}>{t("nav.messages")}</MenuItem>
           </div>
@@ -155,6 +154,9 @@ function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; 
     </Dropdown>
   );
 }
+
+/** Header icon size: a bit smaller on narrow phones so logo, search, new post, favorites, cart, notifications, language and avatar fit at 320 px. */
+const PHONE_ICON = "size-8 min-[360px]:size-9 sm:size-10";
 
 const SHORT: Record<Locale, string> = { ru: "RU", en: "EN", "pt-BR": "PT", es: "ES" };
 
@@ -174,7 +176,7 @@ function LanguageSwitcher() {
           {...p}
           aria-label={t("nav2.language", { lang: LOCALE_NAMES[locale] })}
           title={t("nav2.languageTitle")}
-          className="inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl px-2 text-[13px] font-bold text-ink hover:bg-ink-soft/70"
+          className={cn("inline-flex items-center justify-center gap-1 rounded-xl text-[13px] font-bold text-ink hover:bg-ink-soft/70 sm:h-10 sm:w-auto sm:min-w-10 sm:px-2", PHONE_ICON)}
         >
           <Languages className="size-[18px]" />
           <span className="hidden sm:inline">{SHORT[locale]}</span>
@@ -216,7 +218,7 @@ function TopBar({ onCompose }: { onCompose: () => void }) {
   const [q, setQ] = useState("");
   return (
     <header className="sticky top-0 z-40 border-b border-line/80 bg-bg/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-1.5 px-4 sm:gap-2 sm:px-6 lg:px-8">
         <Link href="/feed" className="shrink-0" aria-label={brand}>
           <Logo withText={false} className="sm:hidden" />
           <Logo className="hidden sm:inline-flex" />
@@ -238,21 +240,21 @@ function TopBar({ onCompose }: { onCompose: () => void }) {
             className="h-10 w-full rounded-xl border border-line bg-surface ps-10 pe-3 text-sm placeholder:text-faint focus:border-teal focus:outline-none focus:ring-3 focus:ring-teal/20"
           />
         </form>
-        <div className="ms-auto flex items-center gap-0.5">
-          <Link href="/search" className="inline-flex size-10 items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70 md:hidden" aria-label={t("nav.search")}>
+        <div className="ms-auto flex items-center gap-0 min-[360px]:gap-0.5">
+          <Link href="/search" className={cn("inline-flex items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70 md:hidden", PHONE_ICON)} aria-label={t("nav.search")}>
             <Search className="size-5" />
           </Link>
           <Button variant="accent" size="sm" onClick={onCompose} className="me-1 hidden lg:inline-flex">
             <Plus className="size-4" /> {t("nav.newPost")}
           </Button>
-          <IconButton label={t("nav.newPost")} onClick={onCompose} className="lg:hidden">
+          <IconButton label={t("nav.newPost")} onClick={onCompose} className={cn("lg:hidden", PHONE_ICON)}>
             <Plus className="size-5" />
           </IconButton>
-          <nav aria-label={t("nav.account")} className="flex items-center gap-0.5">
+          <nav aria-label={t("nav.account")} className="flex items-center gap-0 min-[360px]:gap-0.5">
             {USER_NAV.map(({ href, key, icon: Icon }) => {
               const n = counts[key] ?? 0;
-              // On phones only the cart and notifications stay in the bar; the rest live in the profile menu.
-              const phone = key === "cart" || key === "notifications";
+              // On phones favorites, cart and notifications stay in the bar; orders and messages live in the profile menu.
+              const phone = key === "favorites" || key === "cart" || key === "notifications";
               const label = key === "cart" ? t("nav.cartCount", { count: n }) : key === "notifications" ? t("nav.notificationsCount", { count: n }) : t(`nav.${key}`);
               return (
                 <Link
@@ -262,8 +264,8 @@ function TopBar({ onCompose }: { onCompose: () => void }) {
                   title={t(`nav.${key}`)}
                   aria-current={active(href) ? "page" : undefined}
                   className={cn(
-                    "relative size-10 items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70",
-                    phone ? "inline-flex" : "hidden md:inline-flex",
+                    "relative items-center justify-center rounded-xl text-ink hover:bg-ink-soft/70",
+                    phone ? cn("inline-flex", PHONE_ICON) : "hidden size-10 md:inline-flex",
                     active(href) && "bg-ink-soft",
                   )}
                 >
