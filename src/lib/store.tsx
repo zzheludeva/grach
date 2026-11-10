@@ -25,6 +25,8 @@ import type {
   Tutorial,
   OrderEvent,
   Message,
+  Collection,
+  Visibility,
 } from "./types";
 import { applyTemplateToSession, dueReminder, legacyEnrollment, seatsLeft, sessionAudience, significantChanges, splitLegacy, templateDiffForSessions, type ApplyMode, type LegacyWorkshop } from "./workshops";
 import { pendingReady, canConfirmReceived, canRemindReady, canSellerCancel, validateTransition, type TransitionError, type TransitionProof } from "./orders";
@@ -32,6 +34,7 @@ import { DAY, uid } from "./utils";
 import { region } from "./regions";
 import { detectLocale } from "@/i18n/config";
 import { cleanStory, mainDescription } from "./product-text";
+import { newShareToken } from "./access";
 import { canCancel } from "./orders";
 
 /**
@@ -43,7 +46,7 @@ import { canCancel } from "./orders";
 const STORAGE_KEY = "remeslo:v3";
 
 export interface AppState {
-  version: 7;
+  version: 8;
   sessionUserId: string | null;
   deviceLang: Locale;
   langSuggested: boolean;
@@ -58,7 +61,7 @@ function defaultSettings(country: CountryCode, lang: Locale, city?: string): Set
 
 function initialState(lang: Locale): AppState {
   return {
-    version: 7,
+    version: 8,
     sessionUserId: null,
     deviceLang: lang,
     langSuggested: true,
@@ -91,7 +94,8 @@ function useBuildStore() {
     if (s && (s.version as number) === 4) s = migrateV4(s);
     if (s && (s.version as number) === 5) s = migrateV5(s);
     if (s && (s.version as number) === 6) s = migrateV6(s);
-    if (!s || s.version !== 7) s = initialState(detectLocale(navigator.languages));
+    if (s && (s.version as number) === 7) s = migrateV7(s);
+    if (!s || s.version !== 8) s = initialState(detectLocale(navigator.languages));
     setState(s);
     loaded.current = true;
   }, []);
@@ -910,6 +914,8 @@ function useBuildStore() {
           id,
           authorId: meId,
           status: opts.status,
+          visibility: input.visibility ?? existing?.visibility ?? "public",
+          shareToken: existing?.shareToken ?? newShareToken(),
           updatedAt: at,
         } as Tutorial;
         update((d) => ({ tutorials: existing ? d.tutorials.map((x) => (x.id === id ? tut : x)) : [tut, ...d.tutorials] }));
@@ -933,6 +939,93 @@ function useBuildStore() {
           return { tutorials: d.tutorials.map((x) => (x.id === id ? { ...x, views: (x.views ?? 0) + 1 } : x)) };
         });
       },
+      /** Author changes who can open the material. Data stays intact; others lose access when it becomes private. */
+      setTutorialVisibility(id: string, visibility: Visibility) {
+        update((d) => ({ tutorials: d.tutorials.map((x) => (x.id === id && x.authorId === meId ? { ...x, visibility, shareToken: x.shareToken ?? newShareToken(), updatedAt: now() } : x)) }));
+      },
+      /** New secret link: the old link and access granted through it stop working. */
+      regenerateTutorialLink(id: string) {
+        update((d) => ({ tutorials: d.tutorials.map((x) => (x.id === id && x.authorId === meId ? { ...x, shareToken: newShareToken() } : x)) }));
+      },
+      /** Opening a valid share link remembers access for this person (until the link is regenerated). */
+      redeemLink(kind: "tutorial" | "collection", id: string, key: string) {
+        if (!meId || !key) return;
+        update((d) => {
+          const obj = kind === "tutorial" ? d.tutorials.find((x) => x.id === id) : d.collections.find((x) => x.id === id);
+          if (!obj || obj.shareToken !== key || (obj.visibility ?? "public") !== "link") return;
+          if (d.linkGrants.some((g) => g.userId === meId && g.kind === kind && g.id === id && g.token === key)) return;
+          return { linkGrants: [...d.linkGrants.filter((g) => !(g.userId === meId && g.kind === kind && g.id === id)), { userId: meId, kind, id, token: key, at: now() }] };
+        });
+      },
+
+      /* ---------- collections (inside Favorites) ---------- */
+      /** Creates a collection; an optional first item is added (and saved to Favorites). */
+      createCollection(input: { title: string; description?: string; visibility: Visibility }, first?: { type: FavoriteType; id: string }): string | null {
+        const title = input.title.trim();
+        if (!meId || !title) return null;
+        const at = now();
+        const id = uid("col");
+        const col: Collection = {
+          id, ownerId: meId, title: title.slice(0, 80), description: input.description?.trim().slice(0, 300) || undefined, visibility: input.visibility,
+          shareToken: newShareToken(), items: first ? [{ type: first.type, id: first.id, addedAt: at }] : [], createdAt: at, updatedAt: at,
+        };
+        update((d) => ({
+          collections: [col, ...d.collections],
+          favorites: first && !d.favorites.some((f) => f.userId === meId && f.type === first.type && f.id === first.id) ? [{ userId: meId, type: first.type, id: first.id, at }, ...d.favorites] : d.favorites,
+        }));
+        return id;
+      },
+      updateCollection(id: string, patch: { title?: string; description?: string; visibility?: Visibility }) {
+        update((d) => ({
+          collections: d.collections.map((c) =>
+            c.id === id && c.ownerId === meId
+              ? {
+                  ...c,
+                  ...(patch.title !== undefined && patch.title.trim() ? { title: patch.title.trim().slice(0, 80) } : {}),
+                  ...(patch.description !== undefined ? { description: patch.description.trim().slice(0, 300) || undefined } : {}),
+                  ...(patch.visibility ? { visibility: patch.visibility } : {}),
+                  updatedAt: now(),
+                }
+              : c,
+          ),
+        }));
+      },
+      regenerateCollectionLink(id: string) {
+        update((d) => ({ collections: d.collections.map((c) => (c.id === id && c.ownerId === meId ? { ...c, shareToken: newShareToken(), updatedAt: now() } : c)) }));
+      },
+      deleteCollection(id: string) {
+        update((d) => ({ collections: d.collections.filter((c) => !(c.id === id && c.ownerId === meId)), linkGrants: d.linkGrants.filter((g) => !(g.kind === "collection" && g.id === id)) }));
+      },
+      /** Adds a reference (not a copy). Adding to a collection also saves the object to Favorites. No duplicates. */
+      addToCollection(colId: string, type: FavoriteType, id: string) {
+        if (!meId) return;
+        const at = now();
+        update((d) => {
+          const c = d.collections.find((x) => x.id === colId);
+          if (!c || c.ownerId !== meId || c.items.some((i) => i.type === type && i.id === id)) return;
+          return {
+            collections: d.collections.map((x) => (x.id === colId ? { ...x, items: [...x.items, { type, id, addedAt: at }], updatedAt: at } : x)),
+            favorites: d.favorites.some((f) => f.userId === meId && f.type === type && f.id === id) ? d.favorites : [{ userId: meId, type, id, at }, ...d.favorites],
+          };
+        });
+      },
+      /** Removes the item from this collection only; it stays in Favorites and in other collections. */
+      removeFromCollection(colId: string, type: FavoriteType, id: string) {
+        update((d) => ({ collections: d.collections.map((c) => (c.id === colId && c.ownerId === meId ? { ...c, items: c.items.filter((i) => !(i.type === type && i.id === id)), updatedAt: now() } : c)) }));
+      },
+      moveCollectionItem(colId: string, index: number, dir: -1 | 1) {
+        update((d) => ({
+          collections: d.collections.map((c) => {
+            if (c.id !== colId || c.ownerId !== meId) return c;
+            const j = index + dir;
+            if (j < 0 || j >= c.items.length) return c;
+            const items = [...c.items];
+            [items[index], items[j]] = [items[j], items[index]];
+            return { ...c, items, updatedAt: now() };
+          }),
+        }));
+      },
+
       deleteIdea(ideaId: string) {
         update((d) => ({ ideas: d.ideas.filter((i) => i.id !== ideaId) }));
       },
@@ -985,7 +1078,7 @@ function migrateV3(old: AppState): AppState {
   });
   return {
     ...old,
-    version: 4 as unknown as 7, // intermediate step, finished by migrateV4
+    version: 4 as unknown as 8, // intermediate step, finished by migrateV4
     data: {
       ...d,
       posts: d.posts.map((p) => ({ ...p, technique: p.technique ?? techOf.get(p.id) })),
@@ -1006,7 +1099,7 @@ function migrateV3(old: AppState): AppState {
 function migrateV4(old: AppState): AppState {
   const fresh = buildSeed();
   const d = old.data as SeedData & { sessions?: WorkshopSession[] };
-  if (d.sessions) return { ...old, version: 5 as unknown as 7 };
+  if (d.sessions) return { ...old, version: 5 as unknown as 8 };
   const legacy = d.workshops as unknown as LegacyWorkshop[];
   const legacyEnrollments = d.enrollments as unknown as { userId: string; workshopId: string; at: string }[];
   const enrollments = legacyEnrollments.map(legacyEnrollment);
@@ -1026,7 +1119,7 @@ function migrateV4(old: AppState): AppState {
   const draft = fresh.tutorials.find((x) => x.id === "t10");
   return {
     ...old,
-    version: 5 as unknown as 7, // finished by migrateV5
+    version: 5 as unknown as 8, // finished by migrateV5
     data: {
       ...d,
       workshops,
@@ -1064,7 +1157,7 @@ function migrateV5(old: AppState): AppState {
   const users = new Set(old.data.users.map((u) => u.id));
   const products = new Set(old.data.products.map((p) => p.id));
   const extra = fresh.orders.filter((o) => o.id.startsWith("o2") && !orders.some((x) => x.id === o.id) && users.has(o.buyerId) && users.has(o.sellerId) && o.items.every((i) => products.has(i.productId)));
-  return { ...old, version: 6 as unknown as 7, data: { ...old.data, orders: [...orders, ...extra] } }; // finished by migrateV6
+  return { ...old, version: 6 as unknown as 8, data: { ...old.data, orders: [...orders, ...extra] } }; // finished by migrateV6
 }
 
 /**
@@ -1077,7 +1170,20 @@ function migrateV6(old: AppState): AppState {
     const summary = mainDescription(p.summary, p.description);
     return { ...p, summary, story: cleanStory(p.story, p.summary, p.description), description: "" };
   });
-  return { ...old, version: 7, data: { ...old.data, products } };
+  return { ...old, version: 7 as unknown as 8, data: { ...old.data, products } }; // finished by migrateV7
+}
+
+/**
+ * v7 → v8: tutorials get a visibility (existing ones stay public — nothing disappears) and a share token;
+ * collections and link grants appear. Demo collections are added for demo users that exist in this database.
+ */
+function migrateV7(old: AppState): AppState {
+  const fresh = buildSeed();
+  const d = old.data as SeedData & { collections?: Collection[]; linkGrants?: SeedData["linkGrants"] };
+  const tutorials = d.tutorials.map((t) => ({ ...t, visibility: t.visibility ?? "public", shareToken: t.shareToken ?? newShareToken() }));
+  const users = new Set(d.users.map((u) => u.id));
+  const collections = d.collections ?? fresh.collections.filter((c) => users.has(c.ownerId));
+  return { ...old, version: 8, data: { ...d, tutorials, collections, linkGrants: d.linkGrants ?? [] } };
 }
 
 function bumpCat(d: SeedData, userId: string, cat: string, by: number) {

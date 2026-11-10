@@ -1,5 +1,5 @@
 "use client";
-import { forwardRef, useId } from "react";
+import { forwardRef, useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
@@ -126,8 +126,17 @@ export function Tabs<T extends string>({
   className?: string;
   size?: "sm" | "md";
 }) {
+  // On narrow screens the tab row scrolls: keep the selected tab visible (e.g. opened by a link to the last tab).
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = ref.current;
+    const el = row?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!row || !el) return;
+    const left = el.offsetLeft - row.offsetLeft;
+    if (left < row.scrollLeft || left + el.offsetWidth > row.scrollLeft + row.clientWidth) row.scrollTo({ left: Math.max(0, left - 8) });
+  }, [value]);
   return (
-    <div role="tablist" className={cn("scrollbar-none flex max-w-full gap-1 overflow-x-auto rounded-xl bg-ink-soft/60 p-1", className)}>
+    <div ref={ref} role="tablist" className={cn("scrollbar-none flex max-w-full gap-1 overflow-x-auto rounded-xl bg-ink-soft/60 p-1", className)}>
       {items.map((it) => (
         <button
           key={it.value}

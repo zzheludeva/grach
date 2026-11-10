@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CalendarDays, Clock, MapPin, MessageCircle, MonitorPlay, Users, CheckCircle2, Pencil, Link2, Wrench, ScrollText, GraduationCap, Minus, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { AddToCollectionButton } from "@/components/collections/CollectionModals";
+import { useShell } from "@/components/shell/AppShell";
+import { TranslateBar, useContentTranslation } from "@/components/common/Translatable";
 import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { userById } from "@/lib/selectors";
@@ -22,6 +25,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
   const { id } = use(params);
   const sp = useSearchParams();
   const { state, meId, actions, settings } = useStore();
+  const { openCollections } = useShell();
   const { t, cat, money, date, langName, locale } = useI18n();
   const toast = useToast();
   const d = state!.data;
@@ -31,6 +35,11 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
   const [confirm, setConfirm] = useState(false);
   const [cancel, setCancel] = useState(false);
   const [photo, setPhoto] = useState(0);
+  // Title, description, programme and materials: one translation request, originals untouched.
+  const trTexts = w ? [w.title, w.description, ...w.program, ...w.materials] : [];
+  const tr = useContentTranslation(trTexts, w?.lang);
+  const trProgram = (i: number) => tr.text(2 + i);
+  const trMaterial = (i: number) => tr.text(2 + (w?.program.length ?? 0) + i);
   if (!w || (w.status === "draft" && w.hostId !== meId)) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/learn?tab=workshops">{t("learn.workshops")}</ButtonLink>} />;
   const host = userById(d, w.hostId)!;
   const isHost = w.hostId === meId;
@@ -83,8 +92,9 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
             {w.technique && <Badge tone="warn">{techniqueName(w.technique, locale)}</Badge>}
             <Badge><Clock className="size-3" /> {t("workshop.duration", { count: Math.round((w.durationMin / 60) * 10) / 10 })}</Badge>
           </div>
-          <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={w.lang}>{w.title}</h1>
-          <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={w.lang}>{w.description}</p>
+          <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={tr.on ? undefined : w.lang}>{tr.text(0)}</h1>
+          <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={tr.on ? undefined : w.lang}>{tr.text(1)}</p>
+          <TranslateBar state={tr} className="mt-1" />
           <p className="mt-2 text-xs text-faint">{t("workshop.language", { lang: langName(w.lang) })}</p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             {w.level !== "any" && (
@@ -98,7 +108,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
                 <Wrench className="mt-0.5 size-4 shrink-0 text-rust" />
                 <div>
                   <p className="text-xs font-semibold text-faint">{t("ev.page.materials")}</p>
-                  <ul className="list-inside list-disc text-ink" lang={w.lang}>{w.materials.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                  <ul className="list-inside list-disc text-ink" lang={w.lang}>{w.materials.map((m, i) => <li key={i}>{trMaterial(i)}</li>)}</ul>
                 </div>
               </Card>
             )}
@@ -116,7 +126,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
                 {w.program.map((p, i) => (
                   <li key={i} className="relative" lang={w.lang}>
                     <span className="absolute -start-[33px] top-0.5 flex size-4 rotate-45 items-center justify-center rounded-[3px] bg-saffron" />
-                    <p className="text-[15px] font-semibold text-ink">{p}</p>
+                    <p className="text-[15px] font-semibold text-ink">{trProgram(i)}</p>
                   </li>
                 ))}
               </ol>
@@ -246,6 +256,7 @@ export default function WorkshopPage({ params }: { params: Promise<{ id: string 
               </div>
             )}
             <SaveButton type="workshop" id={w.id} variant="button" className="w-full justify-center" />
+            <AddToCollectionButton type="workshop" id={w.id} onOpen={openCollections} className="w-full" />
           </Card>
         </aside>
       </div>

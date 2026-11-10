@@ -167,8 +167,41 @@ export interface Tutorial {
   links?: { label: string; url: string }[];
   views?: number;
   updatedAt?: string;
+  /** Access: public (default for older data), private or by link. */
+  visibility?: Visibility;
+  shareToken?: string;
 }
 export type TutorialStatus = "draft" | "published" | "hidden";
+
+/**
+ * Who can open a tutorial or a collection (independent of publication status):
+ * public — everyone, listed in catalogues and search; private — only the owner;
+ * link — anyone with the secret link, never listed in catalogues, profiles or search.
+ */
+export type Visibility = "public" | "private" | "link";
+
+/** A user-made collection inside Favorites. Items are references to the original objects, never copies. */
+export interface Collection {
+  id: string;
+  ownerId: string;
+  title: string;
+  description?: string;
+  visibility: Visibility;
+  /** Secret part of the share link (?k=…). Regenerating it revokes earlier link access. */
+  shareToken: string;
+  items: { type: FavoriteType; id: string; addedAt: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Access granted by opening a valid share link; valid only while the token is unchanged. */
+export interface LinkGrant {
+  userId: string;
+  kind: "tutorial" | "collection";
+  id: string;
+  token: string;
+  at: string;
+}
 
 /** Template of a workshop: permanent information. Concrete dates live in WorkshopSession. */
 export type WorkshopStatus = "draft" | "published" | "archived";
@@ -457,6 +490,8 @@ export interface Settings {
   timeZone: string;
   currency: CurrencyCode;
   city: string;
+  /** Translate content in another language automatically on open (default on). */
+  autoTranslate?: boolean;
   /** Organizer reminders before own workshop sessions. */
   notify?: { remind24h: boolean; remind1h: boolean };
 }

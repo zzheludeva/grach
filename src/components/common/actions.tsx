@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import type { FavoriteType } from "@/lib/types";
 import { useState } from "react";
+import { useShell } from "@/components/shell/AppShell";
 
 export function LikeButton({ postId, className, showCount = true }: { postId: string; className?: string; showCount?: boolean }) {
   const { state, meId, actions } = useStore();
@@ -47,14 +48,16 @@ export function SaveButton({
   const { t } = useI18n();
   const toast = useToast();
   const saved = isFav(state!.data, meId, type, id);
+  const { openCollections } = useShell();
   const onClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     actions.toggleFavorite(type, id);
+    // Right after saving, offer to put it into a collection — no trip to Favorites needed.
     toast({
       text: saved ? t("favorites.removed") : t("favorites.added"),
       tone: saved ? "info" : "success",
-      action: saved ? undefined : { label: t("favorites.open"), href: `/favorites?tab=${type}` },
+      action: saved ? undefined : { label: t("colx.addTo"), onClick: () => openCollections({ type, id }) },
     });
   };
   const label = saved ? t("favorites.unsave") : t("favorites.save");

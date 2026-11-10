@@ -1,4 +1,5 @@
 "use client";
+import { VisibilityPicker } from "@/components/common/Visibility";
 import { BackLink } from "@/components/common/BackLink";
 import { useMemo, useState } from "react";
 import Image from "next/image";
@@ -7,7 +8,7 @@ import { ArrowDown, ArrowUp, Eye, ExternalLink, PlayCircle, Plus, Trash } from "
 import { useStore, type TutorialInput } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES, techniqueName, techniquesFor } from "@/i18n/content";
-import type { CategoryId, CurrencyCode, Level, Tutorial } from "@/lib/types";
+import type { CategoryId, CurrencyCode, Level, Tutorial, Visibility } from "@/lib/types";
 import { Badge, Card, DemoNote, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -30,6 +31,7 @@ export function TutorialForm({ tutorial, origin = "dashboard" }: { tutorial?: Tu
   const [title, setTitle] = useState(tutorial?.title ?? "");
   const [cover, setCover] = useState<string[]>(tutorial?.cover ? [tutorial.cover] : []);
   const [summary, setSummary] = useState(tutorial?.summary ?? "");
+  const [visibility, setVisibility] = useState<Visibility>(tutorial?.visibility ?? "public");
   const [content, setContent] = useState(tutorial?.content ?? "");
   const [category, setCategory] = useState<CategoryId>(tutorial?.category ?? "ceramics");
   const [direction, setDirection] = useState(tutorial?.direction ?? "");
@@ -62,6 +64,7 @@ export function TutorialForm({ tutorial, origin = "dashboard" }: { tutorial?: Tu
     materials: lines(materials),
     images,
     videoUrl: video.trim() || undefined,
+    visibility,
     steps: steps.filter((s) => s.title.trim() || s.text.trim()).map((s) => ({ title: s.title.trim(), text: s.text.trim(), image: s.image })),
     links: links.filter((l) => l.url.trim()).map((l) => ({ label: l.label.trim() || l.url.trim(), url: l.url.trim() })),
     price: paid ? { amount: Math.round(Number(price || 0) * 100) / 100, currency } : null,
@@ -208,6 +211,11 @@ export function TutorialForm({ tutorial, origin = "dashboard" }: { tutorial?: Tu
           <Button type="button" variant="soft" size="sm" onClick={() => setLinks([...links, { label: "", url: "" }])}><Plus className="size-4" /> {t("tut.form.addLink")}</Button>
         </Card>
 
+        <Card className="space-y-3 p-5">
+          <h2 className="text-lg font-bold text-ink">{t("vis.title")}</h2>
+          <p className="text-sm text-muted">{t("vis.tutorialNote")}</p>
+          <VisibilityPicker value={visibility} onChange={setVisibility} />
+        </Card>
         <Card className="space-y-3 p-5">
           <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
             <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />

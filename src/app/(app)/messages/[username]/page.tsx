@@ -2,7 +2,8 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Package, Send } from "lucide-react";
+import { CalendarDays, Languages, Package, Send } from "lucide-react";
+import { useMessageTranslations } from "@/components/common/useMessageTranslations";
 import { BackLink } from "@/components/common/BackLink";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -14,7 +15,7 @@ import { cn } from "@/lib/utils";
 export default function Thread({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
   const { state, meId, actions } = useStore();
-  const { t, date } = useI18n();
+  const { t, date, langName } = useI18n();
   const sp = useSearchParams();
   const d = state!.data;
   const other = userByName(d, decodeURIComponent(username));
@@ -25,6 +26,7 @@ export default function Thread({ params }: { params: Promise<{ username: string 
   const [text, setText] = useState("");
   const end = useRef<HTMLDivElement>(null);
   const msgs = other ? d.messages.filter((m) => (m.fromId === meId && m.toId === other.id) || (m.toId === meId && m.fromId === other.id)) : [];
+  const mt = useMessageTranslations(msgs, meId);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [msgs.length]);
@@ -95,7 +97,35 @@ export default function Thread({ params }: { params: Promise<{ username: string 
                     {t("ord.openOrder")}
                   </Link>
                 )}
-                {m.text && <p className="whitespace-pre-line">{m.text}</p>}
+                {m.text && (() => {
+                  const shown = mt.display(m);
+                  const lang = mt.langOf(m.id);
+                  return (
+                    <>
+                      <p className="whitespace-pre-line" lang={shown.translated ? undefined : lang ?? undefined}>{shown.text}</p>
+                      {mt.isForeign(m.id) && (
+                        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
+                          <Languages className="size-3" />
+                          {mt.status === "loading" && !shown.translated && !shown.available ? (
+                            t("trx.translating")
+                          ) : mt.status === "error" && !shown.translated && !shown.available ? (
+                            <>
+                              <span className="text-rose-deep">{t("trx.error")}</span>
+                              <button className="font-semibold text-ink hover:underline" onClick={mt.retry}>{t("trx.retry")}</button>
+                            </>
+                          ) : (
+                            <>
+                              {shown.translated && <span>{t("trx.translatedFrom", { lang: langName(lang ?? "") })}</span>}
+                              <button className="min-h-6 font-semibold text-ink hover:underline" onClick={() => mt.toggle(m.id, m.text)}>
+                                {shown.translated ? t("translate.showOriginal") : t("trx.translate")}
+                              </button>
+                            </>
+                          )}
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
                 <p className={cn("mt-0.5 text-[10px]", m.fromId === meId ? "text-white/60" : "text-faint")}>{date(m.at, "datetime")}</p>
               </div>
             </div>

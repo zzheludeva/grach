@@ -1,12 +1,15 @@
 "use client";
+import { VisibilityBadge, VISIBILITIES } from "@/components/common/Visibility";
+import { tutorialLink, visibilityOf } from "@/lib/access";
+import type { Visibility } from "@/lib/types";
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Bookmark, Eye, EyeOff, Pencil, Plus, Send, Trash, ExternalLink } from "lucide-react";
+import { BookOpen, Bookmark, Copy, Eye, EyeOff, Pencil, Plus, Send, Trash, ExternalLink } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
-import { Badge, Card, DemoNote, EmptyState, PageHeader, Tabs } from "@/components/ui/primitives";
+import { Badge, Card, DemoNote, EmptyState, PageHeader, Select, Tabs } from "@/components/ui/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -53,6 +56,7 @@ export default function MyTutorials() {
                       <span className="flex flex-wrap gap-1.5">
                         <Badge tone={x.status === "published" ? "success" : x.status === "hidden" ? "dark" : "warn"}>{t(`tut.status.${x.status}`)}</Badge>
                         <Badge>{cat(x.category)}</Badge>
+                        <VisibilityBadge value={visibilityOf(x)} />
                       </span>
                       <span className="mt-1 block truncate font-bold text-ink">{x.title || "—"}</span>
                       <span className="block text-xs text-muted">{t(`level.${x.level}`)} · {relative(x.updatedAt ?? x.createdAt)}</span>
@@ -72,6 +76,19 @@ export default function MyTutorials() {
                     {x.status === "hidden" && (
                       <Button size="sm" variant="ghost" onClick={() => { actions.setTutorialStatus(x.id, "published"); toast({ text: t("tut.toast.published") }); }}>
                         <Send className="size-3.5" /> {t("common.publish")}
+                      </Button>
+                    )}
+                    <Select
+                      value={visibilityOf(x)}
+                      onChange={(e) => { actions.setTutorialVisibility(x.id, e.target.value as Visibility); toast({ text: t("vis.changed", { v: t(`vis.${e.target.value}`) }) }); }}
+                      aria-label={t("vis.title")}
+                      className="h-8 w-auto py-0 text-[13px]"
+                    >
+                      {VISIBILITIES.map((v) => <option key={v} value={v}>{t(`vis.${v}`)}</option>)}
+                    </Select>
+                    {visibilityOf(x) === "link" && (
+                      <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(tutorialLink(x, window.location.origin)).catch(() => {}); toast({ text: t("vis.copied") }); }} aria-label={t("vis.copy")} title={t("vis.copy")}>
+                        <Copy className="size-3.5" />
                       </Button>
                     )}
                     <ButtonLink href={`/learn/tutorial/${x.id}`} size="sm" variant="ghost" aria-label={t("sell.mine.view")}><ExternalLink className="size-3.5" /></ButtonLink>

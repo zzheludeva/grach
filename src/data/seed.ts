@@ -20,8 +20,7 @@ import type {
   Address,
   AIConversation,
   Review,
-  Project,
-} from "@/lib/types";
+  Project, Collection, FavoriteType, LinkGrant } from "@/lib/types";
 import { DAY, HOUR, hashStr } from "@/lib/utils";
 import { cleanStory, mainDescription } from "@/lib/product-text";
 import { legacyEnrollment, splitLegacy, type LegacyWorkshop } from "@/lib/workshops";
@@ -573,6 +572,8 @@ export function buildSeed(now = Date.now()) {
       technique: TECH[rest.id],
       format: "steps",
       status: "published",
+      visibility: "public",
+      shareToken: `demo${(hashStr(`share:${rest.id}`) >>> 0).toString(36)}${(hashStr(`tok:${rest.id}`) >>> 0).toString(36)}`,
       ...rest,
       views: rest.status === "draft" ? 0 : 300 + (hashStr(rest.id) % 1500),
       cover: cover.startsWith("/") ? cover : `/img/${cover}.jpg`,
@@ -917,6 +918,20 @@ export function buildSeed(now = Date.now()) {
   // Marina (buyer): a master asks her to confirm readiness.
   readyDemo("o2003", { buyerId: "u_marina", items: [["pr12", 1]], status: "preparing", createdDaysAgo: 6, delivery: "post", country: "RU", shipping: 350, address: addressRU(users.find((u) => u.id === "u_marina")!.name, "Санкт-Петербург") }, 0.4, false, "Посмотрите, пожалуйста, всё ли так, как вы хотели.");
 
+  /* ---------------- Collections ---------------- */
+  // Mixed-type collections that reference existing objects (never copies).
+  const COL = (id: string, ownerId: string, title: string, visibility: Collection["visibility"], items: [FavoriteType, string][], d: number, description?: string): Collection => ({
+    id, ownerId, title, description, visibility,
+    shareToken: `demo${(hashStr(`col:${id}`) >>> 0).toString(36)}${(hashStr(`k:${id}`) >>> 0).toString(36)}`,
+    items: items.map(([type, ref], i) => ({ type, id: ref, addedAt: ago(d - i * 0.2) })),
+    createdAt: ago(d), updatedAt: ago(d - 1),
+  });
+  const collections: Collection[] = [
+    COL("col1", "u_marina", "Идеи для керамической мастерской", "public", [["post", "p7"], ["product", "pr12"], ["tutorial", "t7"], ["post", "p8"]], 12, "Что хочу попробовать сама и показать на занятиях."),
+    COL("col2", "u_anya", "Подарки к Новому году", "link", [["product", "pr14"], ["workshop", "w1"], ["tutorial", "t8"]], 4, "Делаю своими руками или покупаю у мастеров."),
+    COL("col3", "u_anya", "Когда-нибудь попробую", "private", [["post", "p6"], ["tutorial", "t1"]], 8),
+  ];
+
   /* ---------------- Personal state ---------------- */
   const favorites: Favorite[] = [
     { userId: "u_anya", type: "post", id: "p6", at: ago(3) },
@@ -1043,6 +1058,8 @@ export function buildSeed(now = Date.now()) {
     conversations,
     projects,
     reminderLog: [] as string[],
+    collections,
+    linkGrants: [] as LinkGrant[],
     productReviews,
     categoryViews,
   };

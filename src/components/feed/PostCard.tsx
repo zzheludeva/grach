@@ -9,7 +9,7 @@ import type { Post } from "@/lib/types";
 import { Avatar, Badge } from "@/components/ui/primitives";
 import { FollowButton, LikeButton, SaveButton } from "@/components/common/actions";
 import { categoryColor } from "@/i18n/content";
-import { useTranslation } from "@/components/common/Translatable";
+import { useContentTranslation, TranslateBar } from "@/components/common/Translatable";
 import { cn } from "@/lib/utils";
 
 export function PostCard({ post, discovery, priority }: { post: Post; discovery?: boolean; priority?: boolean }) {
@@ -17,10 +17,11 @@ export function PostCard({ post, discovery, priority }: { post: Post; discovery?
   const { t, cat, relative, num } = useI18n();
   const d = state!.data;
   const author = userById(d, post.authorId);
-  const tr = useTranslation(post.lang, post.translations);
+  // Cards translate on demand only (no request per card in the feed); cached translations show instantly.
+  const tr = useContentTranslation([post.title, post.body], post.lang, { auto: false });
   if (!author) return null;
-  const title = tr.on ? tr.tr!.title : post.title;
-  const body = tr.on ? tr.tr!.body : post.body;
+  const title = tr.text(0);
+  const body = tr.text(1);
   const cc = commentsOf(d, post.id).length;
   return (
     <article className={cn("group animate-fade-up overflow-hidden rounded-[var(--radius-tile)] border bg-surface shadow-[var(--shadow-tile)]", discovery ? "border-teal/60 ring-2 ring-teal/20" : "border-line")}>
@@ -71,11 +72,7 @@ export function PostCard({ post, discovery, priority }: { post: Post; discovery?
           <h3 className="text-[15px] font-bold leading-snug text-ink">{title}</h3>
           <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-muted">{body}</p>
         </Link>
-        {tr.foreign && tr.available && (
-          <button onClick={tr.toggle} className="mt-1.5 text-[12px] font-semibold text-teal hover:underline">
-            {tr.on ? t("translate.showOriginal") : t("translate.show")}
-          </button>
-        )}
+        <TranslateBar state={tr} className="mt-1" />
         <div className="mt-2.5 flex items-center gap-1 border-t border-line/70 pt-2">
           <LikeButton postId={post.id} />
           <Link href={`/post/${post.id}#comments`} className="inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm font-semibold text-muted hover:text-ink" aria-label={t("post.commentsCount", { count: cc })}>

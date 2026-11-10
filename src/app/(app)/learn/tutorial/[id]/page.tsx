@@ -1,10 +1,17 @@
 "use client";
 import { use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle2, Circle, Clock, Download, Loader2, Lock, Signal, Pencil, PlayCircle, ExternalLink } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Copy, Download, Globe, Link2, Loader2, Lock, Signal, Pencil, PlayCircle, ExternalLink } from "lucide-react";
+import { tutorialAccess, tutorialLink, visibilityOf } from "@/lib/access";
+import { TranslateBar, useContentTranslation } from "@/components/common/Translatable";
+import { translateTexts } from "@/lib/translate";
+import { tutorialTexts, withTutorialTexts } from "@/lib/tutorial-text";
 import { techniqueName } from "@/i18n/content";
 import { useStore } from "@/lib/store";
+import { AddToCollectionButton } from "@/components/collections/CollectionModals";
+import { useShell } from "@/components/shell/AppShell";
 import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { rating, userById } from "@/lib/selectors";
@@ -18,6 +25,7 @@ import { cn } from "@/lib/utils";
 export default function TutorialPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { state, meId, actions } = useStore();
+  const { openCollections } = useShell();
   const { t, cat, money, relative, langName, locale } = useI18n();
   const toast = useToast();
   const d = state!.data;
@@ -25,30 +33,59 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
   const [done, setDone] = useState<number[]>([]);
   const [buy, setBuy] = useState(false);
   const [rev, setRev] = useState({ rating: 5, text: "" });
-  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<"original" | "translated" | null>(null);
+  const sp = useSearchParams();
+  const key = sp.get("k");
+  // Access is checked on every open: private → author only; link → valid ?k= or access granted earlier by that link.
+  const access = tutorialAccess(d, tut, meId, key);
+  const ownedEarly = !!tut && (!tut.price || tut.authorId === meId || d.tutorialPurchases.some((p) => p.userId === meId && p.tutorialId === tut.id));
+  const stepsEarly = tut ? (ownedEarly ? tut.steps : tut.steps.slice(0, 1)) : [];
+  const trTexts = tut && access !== "denied" ? tutorialTexts(tut, stepsEarly) : [];
+  const tr = useContentTranslation(trTexts, tut?.lang);
+  const view = tut && tr.on ? withTutorialTexts(tut, stepsEarly, trTexts.map((_, i) => tr.text(i))) : null;
   useEffect(() => {
+    if (access === "denied") return;
     actions.viewTutorial(id);
+    if (key && access === "allowed") actions.redeemLink("tutorial", id, key);
     // one view per visit
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-  // Drafts and hidden materials are visible to their author only.
-  if (tut && tut.status !== "published" && tut.authorId !== meId) return <EmptyState title={t("tut.page.unavailable")} action={<ButtonLink href="/learn">{t("nav.learn")}</ButtonLink>} />;
-  if (!tut) return <EmptyState title={t("errors.notFound")} action={<ButtonLink href="/learn">{t("nav.learn")}</ButtonLink>} />;
+  }, [id, access]);
+  // Private, link-only without the link, drafts and deleted materials look the same to others: unavailable.
+  if (!tut || access === "denied") return <EmptyState title={t("tut.page.unavailable")} text={t("vis.unavailableText")} action={<ButtonLink href="/learn">{t("nav.learn")}</ButtonLink>} />;
   const author = userById(d, tut.authorId)!;
-  const owned = !tut.price || tut.authorId === meId || d.tutorialPurchases.some((p) => p.userId === meId && p.tutorialId === tut.id);
+  const owned = ownedEarly;
+  const vis = visibilityOf(tut);
+  const shown = view?.tut ?? tut;
   const r = rating(tut.reviews);
   const reviewed = tut.reviews.some((x) => x.authorId === meId);
   const visibleSteps = owned ? tut.steps : tut.steps.slice(0, 1);
 
-  /** PDF of the material's content only (no page UI). Paid materials: the full PDF is available once owned. */
-  const downloadPdf = async () => {
-    setPdfBusy(true);
+  /**
+   * PDF of the material's content only (no page UI). Paid materials: the full PDF is available once owned.
+   * "translated": the same translation as on the page (cache first; translated again if the material changed).
+   * If translation fails, nothing partial is produced — the person is offered the original instead.
+   */
+  const downloadPdf = async (mode: "original" | "translated") => {
+    setPdfBusy(mode);
     try {
       const { exportTutorialPdf, pdfFileName } = await import("@/lib/pdf/tutorial-pdf");
+      let doc = { tut, steps: visibleSteps };
+      if (mode === "translated") {
+        let out: string[];
+        try {
+          out = await translateTexts(tutorialTexts(tut, visibleSteps), locale);
+        } catch {
+          toast({ text: t("trx.pdfError"), tone: "error", action: { label: t("trx.pdfOriginal"), onClick: () => void downloadPdf("original") } });
+          return;
+        }
+        const tx = withTutorialTexts(tut, visibleSteps, out);
+        doc = { tut: { ...tx.tut, lang: locale }, steps: tx.steps };
+      }
       const meta = [cat(tut.category), tut.direction, tut.technique ? techniqueName(tut.technique, locale) : "", t(`level.${tut.level}`), t("learn.minutes", { count: tut.durationMin })].filter(Boolean).join(" · ");
+      const date = new Date().toLocaleDateString(locale);
       await exportTutorialPdf(
-        tut,
-        visibleSteps,
+        doc.tut,
+        doc.steps,
         {
           brand: t("brand.name"),
           meta,
@@ -59,16 +96,21 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
           video: t("tut.page.watch"),
           links: t("pdf.links"),
           page: (n, total) => t("pdf.page", { n, total }),
-          source: t("pdf.source", { date: new Date().toLocaleDateString(locale) }),
+          source: mode === "translated" ? `${t("pdf.source", { date })} · ${t("trx.pdfNote", { lang: langName(tut.lang) })}` : t("pdf.source", { date }),
         },
-        pdfFileName(tut.title),
+        pdfFileName(mode === "translated" ? `${doc.tut.title} (${locale})` : tut.title),
       );
       toast({ text: t("pdf.done") });
     } catch {
       toast({ text: t("pdf.error"), tone: "error" });
     } finally {
-      setPdfBusy(false);
+      setPdfBusy(null);
     }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard?.writeText(tutorialLink(tut, window.location.origin)).catch(() => {});
+    toast({ text: t("vis.copied") });
   };
 
   return (
@@ -80,6 +122,18 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
         )}
       </div>
       {tut.status !== "published" && <DemoNote className="mb-4">{tut.status === "draft" ? t("tut.page.draft") : t("tut.page.hidden")}</DemoNote>}
+      {access === "owner" && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm">
+          {vis === "public" ? <Globe className="size-4 text-teal" /> : vis === "link" ? <Link2 className="size-4 text-rust" /> : <Lock className="size-4 text-muted" />}
+          <span className="font-semibold text-ink">{t(`vis.${vis}`)}</span>
+          <span className="text-muted">{t(`vis.${vis}Hint`)}</span>
+          {vis === "link" && (
+            <Button size="sm" variant="soft" className="ms-auto" onClick={copyLink}>
+              <Copy className="size-3.5" /> {t("vis.copy")}
+            </Button>
+          )}
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">
         <div className="min-w-0">
           <div className="relative aspect-[16/9] overflow-hidden rounded-3xl bg-line">
@@ -96,14 +150,14 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
               <Clock className="size-3" /> {t("learn.minutes", { count: tut.durationMin })}
             </Badge>
           </div>
-          <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={tut.lang}>
-            {tut.title}
+          <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={tr.on ? undefined : tut.lang}>
+            {shown.title}
           </h1>
-          <p className="mt-2 text-[15px] text-muted" lang={tut.lang}>
-            {tut.summary}
+          <p className="mt-2 text-[15px] text-muted" lang={tr.on ? undefined : tut.lang}>
+            {shown.summary}
           </p>
-          <p className="mt-2 text-xs text-faint">{t("translate.original", { lang: langName(tut.lang) })}</p>
-          {tut.content && <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={tut.lang}>{tut.content}</p>}
+          {tr.foreign ? <TranslateBar state={tr} className="mt-2" /> : <p className="mt-2 text-xs text-faint">{t("translate.original", { lang: langName(tut.lang) })}</p>}
+          {shown.content && <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={tr.on ? undefined : tut.lang}>{shown.content}</p>}
           {tut.videoUrl && (
             <a href={tut.videoUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-deep">
               <PlayCircle className="size-4" /> {t("tut.page.watch")}
@@ -123,7 +177,7 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
           <section className="mt-8">
             <h2 className="mb-3 text-lg font-bold text-ink">{t("learn.steps")}</h2>
             <ol className="space-y-3">
-              {visibleSteps.map((s, i) => {
+              {(view?.steps ?? visibleSteps).map((s, i) => {
                 const on = done.includes(i);
                 return (
                   <li key={i}>
@@ -218,19 +272,32 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
             <div className="mt-4 flex flex-col gap-2">
               {!owned && <Button onClick={() => setBuy(true)}>{t("learn.buy")}</Button>}
               <SaveButton type="tutorial" id={tut.id} variant="button" className="justify-center" />
+              <AddToCollectionButton type="tutorial" id={tut.id} onOpen={openCollections} />
               {owned ? (
-                <Button variant="secondary" onClick={downloadPdf} disabled={pdfBusy} className="justify-center" aria-busy={pdfBusy}>
-                  {pdfBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {pdfBusy ? t("pdf.busy") : t("pdf.download")}
-                </Button>
+                tr.foreign ? (
+                  // Material in another language: original or translation into the interface language.
+                  <div className="grid gap-2">
+                    <Button variant="secondary" onClick={() => downloadPdf("translated")} disabled={!!pdfBusy} className="justify-center" aria-busy={pdfBusy === "translated"}>
+                      {pdfBusy === "translated" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {pdfBusy === "translated" ? t("pdf.busy") : t("trx.pdfTranslated", { lang: langName(locale) })}
+                    </Button>
+                    <Button variant="ghost" onClick={() => downloadPdf("original")} disabled={!!pdfBusy} className="justify-center" aria-busy={pdfBusy === "original"}>
+                      {pdfBusy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {pdfBusy === "original" ? t("pdf.busy") : t("trx.pdfOriginalLang", { lang: langName(tut.lang) })}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="secondary" onClick={() => downloadPdf("original")} disabled={!!pdfBusy} className="justify-center" aria-busy={!!pdfBusy}>
+                    {pdfBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {pdfBusy ? t("pdf.busy") : t("pdf.download")}
+                  </Button>
+                )
               ) : (
                 <p className="text-center text-xs text-muted">{t("pdf.afterPurchase")}</p>
               )}
             </div>
             <div className="mt-5">
               <p className="mb-2 text-sm font-bold text-ink">{t("learn.materialsNeeded")}</p>
-              <ul className="space-y-1.5 text-sm text-text/85" lang={tut.lang}>
-                {tut.materials.map((m) => (
-                  <li key={m} className="flex gap-2">
+              <ul className="space-y-1.5 text-sm text-text/85" lang={tr.on ? undefined : tut.lang}>
+                {shown.materials.map((m, i) => (
+                  <li key={`${i}-${m}`} className="flex gap-2">
                     <span className="mt-2 size-1.5 shrink-0 rotate-45 bg-saffron" />
                     {m}
                   </li>
@@ -242,7 +309,7 @@ export default function TutorialPage({ params }: { params: Promise<{ id: string 
             <Card className="p-5">
               <p className="mb-2 text-sm font-bold text-ink">{t("tut.form.links")}</p>
               <ul className="space-y-1.5 text-sm">
-                {tut.links.map((l, i) => (
+                {(shown.links ?? tut.links).map((l, i) => (
                   <li key={i}><a href={l.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-teal hover:underline"><ExternalLink className="size-3.5" />{l.label}</a></li>
                 ))}
               </ul>

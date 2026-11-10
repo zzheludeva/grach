@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Hammer, MessageCircle, Minus, Plus, Ruler, Truck, MapPin, ShoppingCart, PackageCheck, Pencil, Brush, ListChecks, Tag } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { AddToCollectionButton } from "@/components/collections/CollectionModals";
+import { useShell } from "@/components/shell/AppShell";
 import { cleanStory, mainDescription } from "@/lib/product-text";
 import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -16,12 +18,13 @@ import { Price, ProductCard } from "@/components/common/cards";
 import { useToast } from "@/components/ui/toast";
 import { region } from "@/lib/regions";
 import { cn } from "@/lib/utils";
-import { useTranslation, TranslateBar } from "@/components/common/Translatable";
+import { useContentTranslation, TranslateBar } from "@/components/common/Translatable";
 import { techniqueName } from "@/i18n/content";
 
 export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { state, meId, settings, actions } = useStore();
+  const { openCollections } = useShell();
   const { t, cat, money, relative, langName, locale } = useI18n();
   const toast = useToast();
   const router = useRouter();
@@ -29,7 +32,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const p = d.products.find((x) => x.id === id);
   const [img, setImg] = useState(0);
   const [qty, setQty] = useState(1);
-  const tr = useTranslation(p?.lang ?? "ru");
+  // Title, description and story are translated together; the original stays untouched.
+  const tr = useContentTranslation(p ? [p.title, mainDescription(p.summary, p.description), cleanStory(p.story, p.summary, p.description)] : [], p?.lang);
   useEffect(() => {
     if (p) actions.viewProduct(p.id);
     // count one view per visit
@@ -93,8 +97,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             {p.availability === "made_to_order" && <Badge tone="warn">{t("product.madeToOrderDays", { count: p.makeDays ?? 0 })}</Badge>}
             {p.availability === "sold_out" && <Badge tone="dark">{t("product.soldOut")}</Badge>}
           </div>
-          <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={p.lang}>
-            {p.title}
+          <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl" lang={tr.on ? undefined : p.lang}>
+            {tr.text(0)}
           </h1>
           <Link href={`/profile/${seller.username}`} className="mt-1 inline-block text-sm font-semibold text-muted hover:text-ink">
             {t("product.by", { name: seller.name })}
@@ -107,10 +111,10 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
           <Price value={p.price} className="mt-4 flex text-3xl font-bold text-ink" />
           {p.price.currency !== settings.currency && <p className="mt-1 text-xs text-muted">{t("money.noConversion")}</p>}
           <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={p.lang}>
-            {mainDescription(p.summary, p.description)}
+            {tr.text(1)}
           </p>
           <div className="mt-1">
-            <TranslateBar contentLang={p.lang} state={tr} />
+            <TranslateBar state={tr} />
           </div>
 
           {!ships && (
@@ -151,6 +155,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
           {isMine && <DemoNote className="mt-4">{t("product.yours")}</DemoNote>}
           <div className="mt-4 flex flex-wrap gap-2">
             <SaveButton type="product" id={p.id} variant="button" />
+            <AddToCollectionButton type="product" id={p.id} onOpen={openCollections} />
             {!isMine && (
               <ButtonLink href={`/messages/${seller.username}`} variant="secondary">
                 <MessageCircle className="size-4" /> {t("product.askSeller")}
@@ -279,7 +284,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             </div>
             <div className="space-y-4 p-5">
               <p className="whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={p.lang}>
-                {story}
+                {tr.text(2)}
               </p>
               <p className="text-xs text-faint">{t("translate.original", { lang: langName(p.lang) })}</p>
             </div>

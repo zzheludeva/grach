@@ -58,6 +58,24 @@ export default function SettingsPage() {
             );
           })}
           <p className="mt-2 text-xs text-faint">{t("rem.note")}</p>
+          <div className="mt-5 border-t border-line pt-4">
+            <SectionTitle>{t("trx.settingsTitle")}</SectionTitle>
+            <label className="flex cursor-pointer items-start gap-3 py-1.5 text-sm font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={settings.autoTranslate !== false}
+                onChange={(e) => {
+                  actions.updateSettings({ autoTranslate: e.target.checked });
+                  toast({ text: t("settings.saved") });
+                }}
+                className="mt-0.5 size-4 accent-[var(--color-ink)]"
+              />
+              <span>
+                {t("trx.auto")}
+                <span className="mt-0.5 block text-xs font-normal text-muted">{t("trx.autoHint")}</span>
+              </span>
+            </label>
+          </div>
         </Card>
         <Card className="h-fit p-5">
           <SectionTitle>{t("settings.preview")}</SectionTitle>

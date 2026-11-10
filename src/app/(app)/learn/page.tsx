@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { CalendarPlus, FilePlus2, MapPin } from "lucide-react";
 import { useQueryFlag, useQueryState } from "@/lib/nav-history";
 import { FavoritesLink } from "@/components/common/FavoritesLink";
+import { isTutorialListed, tutorialAccess } from "@/lib/access";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES } from "@/i18n/content";
@@ -32,7 +33,7 @@ export default function Learn() {
     () =>
       d.tutorials.filter(
         (x) =>
-          x.status === "published" &&
+          isTutorialListed(x) &&
           (!category || x.category === category) &&
           (!level || x.level === level) &&
           (!price || (price === "free" ? !x.price : !!x.price)) &&
@@ -57,7 +58,7 @@ export default function Learn() {
     .filter((x): x is { e: Enrollment; w: Workshop; s: WorkshopSession } => !!x.w && !!x.s)
     .sort((a, b) => a.s.startsAt.localeCompare(b.s.startsAt));
   const myWorkshops = myBookings;
-  const myTutorials = d.tutorialPurchases.filter((p) => p.userId === meId).map((p) => d.tutorials.find((x) => x.id === p.tutorialId)!).filter(Boolean);
+  const myTutorials = d.tutorialPurchases.filter((p) => p.userId === meId).map((p) => d.tutorials.find((x) => x.id === p.tutorialId)!).filter((x) => !!x && tutorialAccess(d, x, meId) !== "denied");
   const enrolledIds = new Set(myBookings.map((x) => x.e.sessionId));
   const offlineElsewhere = d.sessions.filter((s) => s.format === "offline" && s.status === "scheduled" && s.city !== settings.city && new Date(s.startsAt).getTime() > Date.now()).length;
 
@@ -90,7 +91,7 @@ export default function Learn() {
         value={tab}
         onChange={(v) => setTab(v)}
         items={[
-          { value: "materials", label: t("learn.materials"), count: d.tutorials.filter((x) => x.status === "published").length },
+          { value: "materials", label: t("learn.materials"), count: d.tutorials.filter(isTutorialListed).length },
           { value: "workshops", label: t("learn.workshops") },
           { value: "mine", label: t("learn.mine"), count: myWorkshops.length + myTutorials.length },
         ]}

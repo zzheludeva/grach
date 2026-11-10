@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { ExternalLink, MapPin, MessageCircle, Pencil, CalendarDays, Lightbulb, FolderKanban } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { CollectionCard } from "@/components/collections/CollectionViews";
+import { TranslatableText } from "@/components/common/Translatable";
 import { useI18n } from "@/i18n/I18nProvider";
 import { followersOf, followingOf, postsOf, productsOf, userByName, workshopsOf, tutorialsOf } from "@/lib/selectors";
 import { Avatar, Badge, Card, EmptyState, Tabs } from "@/components/ui/primitives";
@@ -15,7 +17,7 @@ import { ProductCard, TutorialCard, WorkshopCard } from "@/components/common/car
 import { categoryColor } from "@/i18n/content";
 import { useShell } from "@/components/shell/AppShell";
 
-type Tab = "posts" | "products" | "learning" | "saved";
+type Tab = "posts" | "products" | "learning" | "collections" | "saved";
 
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
@@ -31,6 +33,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const products = productsOf(d, user.id);
   const workshops = workshopsOf(d, user.id);
   const tutorials = tutorialsOf(d, user.id);
+  // Only public collections appear in a profile (link-only and private ones never do — also for the owner's view).
+  const collections = d.collections.filter((c) => c.ownerId === user.id && c.visibility === "public");
   const ideas = isMe ? d.ideas.filter((i) => i.userId === user.id) : [];
   const followers = followersOf(d, user.id).length;
   const following = followingOf(d, user.id).length;
@@ -40,6 +44,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     { value: "posts", label: t("profile.posts"), count: posts.length },
     { value: "products", label: t("profile.products"), count: products.length },
     { value: "learning", label: t("profile.learning"), count: workshops.length + tutorials.length },
+    { value: "collections", label: t("colx.tab"), count: collections.length },
   ];
   if (isMe) tabs.push({ value: "saved", label: t("profile.projects"), count: ideas.length });
 
@@ -76,9 +81,9 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
             </div>
             <p className="text-sm text-muted">@{user.username}</p>
             {user.bio && (
-              <p className="mt-3 max-w-2xl whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={user.contentLang}>
-                {user.bio}
-              </p>
+              <div className="mt-3 max-w-2xl">
+                <TranslatableText text={user.bio} lang={user.contentLang} className="text-[15px] leading-relaxed text-text/90" />
+              </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
               <span className="inline-flex items-center gap-1">
@@ -181,6 +186,14 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
               </div>
             ) : (
               <EmptyState title={t("profile.noLearning")} />
+            ))}
+          {tab === "collections" &&
+            (collections.length ? (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {collections.map((c) => <CollectionCard key={c.id} c={c} showVisibility={false} />)}
+              </div>
+            ) : (
+              <EmptyState title={isMe ? t("colx.profileEmptyMe") : t("colx.profileEmpty")} text={isMe ? t("colx.profileEmptyMeText") : undefined} />
             ))}
           {tab === "saved" &&
             (ideas.length ? (

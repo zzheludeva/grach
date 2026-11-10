@@ -1,37 +1,69 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useQueryState } from "@/lib/nav-history";
+import { FolderPlus } from "lucide-react";
+import { CollectionCard } from "@/components/collections/CollectionViews";
+import { CollectionEditModal } from "@/components/collections/CollectionModals";
+import { tutorialAccess } from "@/lib/access";
 import { Search } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { CATEGORIES } from "@/i18n/content";
 import { EmptyState, Input, PageHeader, Select, Tabs } from "@/components/ui/primitives";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { PostCard } from "@/components/feed/PostCard";
 import { ProductCard, TutorialCard, WorkshopCard } from "@/components/common/cards";
 import type { CategoryId, FavoriteType } from "@/lib/types";
 import { norm } from "@/lib/utils";
 
 const TYPES: FavoriteType[] = ["post", "tutorial", "product", "workshop"];
+/** Second level of Favorites: the content types plus user-made collections that mix types. */
+type FavTab = FavoriteType | "collections";
 const SECTION: Record<FavoriteType, string> = { post: "/feed", tutorial: "/learn", product: "/market", workshop: "/learn?tab=workshops" };
+
+/** "Collections" tab: the person's own collections and a quick way to start a new one. */
+function CollectionsTab() {
+  const { state, meId } = useStore();
+  const { t } = useI18n();
+  const [creating, setCreating] = useState(false);
+  const mine = state!.data.collections.filter((c) => c.ownerId === meId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-xl text-sm text-muted">{t("colx.intro")}</p>
+        <Button onClick={() => setCreating(true)}><FolderPlus className="size-4" /> {t("colx.new")}</Button>
+      </div>
+      {mine.length === 0 ? (
+        <EmptyState icon={<FolderPlus className="size-6" />} title={t("colx.empty")} text={t("colx.emptyText")} action={<Button onClick={() => setCreating(true)}>{t("colx.new")}</Button>} />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {mine.map((c) => <CollectionCard key={c.id} c={c} />)}
+        </div>
+      )}
+      {creating && <CollectionEditModal open onClose={() => setCreating(false)} />}
+    </div>
+  );
+}
 
 export default function Favorites() {
   const { state, meId } = useStore();
   const { t, cat } = useI18n();
   const d = state!.data;
   // The tab comes from the URL, so sections can link straight to their category (/favorites?tab=product).
-  const [tab, setTab] = useQueryState<FavoriteType>("tab", "post", TYPES);
+  const [tab, setTab] = useQueryState<FavTab>("tab", "post", [...TYPES, "collections"]);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<CategoryId | "">("");
 
   const mine = d.favorites.filter((f) => f.userId === meId);
   const counts = Object.fromEntries(TYPES.map((ty) => [ty, mine.filter((f) => f.type === ty).length])) as Record<FavoriteType, number>;
 
+  const myCollections = d.collections.filter((c) => c.ownerId === meId);
   const items = useMemo(() => {
+    if (tab === "collections") return [];
     const ids = mine.filter((f) => f.type === tab).map((f) => f.id);
     const match = (title: string, c?: CategoryId, extra = "") => (!q || norm(`${title} ${extra}`).includes(norm(q))) && (!category || c === category);
     if (tab === "post") return d.posts.filter((p) => ids.includes(p.id) && match(p.title, p.category, p.body)).sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
-    if (tab === "tutorial") return d.tutorials.filter((x) => ids.includes(x.id) && (x.status === "published" || x.authorId === meId) && match(x.title, x.category, x.summary));
+    if (tab === "tutorial") return d.tutorials.filter((x) => ids.includes(x.id) && tutorialAccess(d, x, meId) !== "denied" && match(x.title, x.category, x.summary));
     if (tab === "product") return d.products.filter((x) => ids.includes(x.id) && (x.status === "published" || x.sellerId === meId) && match(x.title, x.category, x.summary));
     return d.workshops.filter((x) => ids.includes(x.id) && (x.status === "published" || x.hostId === meId) && match(x.title, x.category, x.description));
   }, [d, mine, tab, q, category]);
@@ -43,9 +75,12 @@ export default function Favorites() {
         <Tabs
           value={tab}
           onChange={(v) => setTab(v)}
-          items={TYPES.map((ty) => ({ value: ty, label: t(`favorites.tab.${ty}`), count: counts[ty] }))}
+          items={[
+            ...TYPES.map((ty) => ({ value: ty as FavTab, label: t(`favorites.tab.${ty}`), count: counts[ty] })),
+            { value: "collections" as FavTab, label: t("colx.tab"), count: myCollections.length },
+          ]}
         />
-        <div className="flex min-w-0 flex-1 basis-72 gap-2">
+        {tab !== "collections" && <div className="flex min-w-0 flex-1 basis-72 gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("favorites.search")} aria-label={t("favorites.search")} className="ps-10" />
@@ -58,9 +93,11 @@ export default function Favorites() {
               </option>
             ))}
           </Select>
-        </div>
+        </div>}
       </div>
-      {items.length === 0 ? (
+      {tab === "collections" ? (
+        <CollectionsTab />
+      ) : items.length === 0 ? (
         counts[tab] === 0 ? (
           <EmptyState title={t(`favorites.empty.${tab}`)} text={t("favorites.emptyText")} action={<ButtonLink href={SECTION[tab]}>{t(`favorites.goTo.${tab}`)}</ButtonLink>} />
         ) : (

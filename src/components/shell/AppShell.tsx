@@ -16,9 +16,15 @@ import { Composer } from "@/components/feed/Composer";
 import { LangSuggestion } from "./LangSuggestion";
 import { NavTracker } from "@/lib/nav-history";
 import { LOCALES, LOCALE_NAMES } from "@/i18n/config";
-import type { Locale } from "@/lib/types";
+import type { FavoriteType, Locale } from "@/lib/types";
+import { CollectionPicker } from "@/components/collections/CollectionModals";
 
-const ShellCtx = createContext<{ openComposer: (prefill?: { title?: string; body?: string }) => void }>({ openComposer: () => {} });
+type ShellApi = {
+  openComposer: (prefill?: { title?: string; body?: string }) => void;
+  /** "Add to collection" from any section, without leaving the page. */
+  openCollections: (item: { type: FavoriteType; id: string }) => void;
+};
+const ShellCtx = createContext<ShellApi>({ openComposer: () => {}, openCollections: () => {} });
 export const useShell = () => useContext(ShellCtx);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -26,6 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const router = useRouter();
   const [composer, setComposer] = useState<{ open: boolean; prefill?: { title?: string; body?: string } }>({ open: false });
+  const [picker, setPicker] = useState<{ type: FavoriteType; id: string } | null>(null);
 
   useEffect(() => {
     if (state && !meId) router.replace("/welcome");
@@ -34,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!state || !me) return null;
 
   return (
-    <ShellCtx.Provider value={{ openComposer: (prefill) => setComposer({ open: true, prefill }) }}>
+    <ShellCtx.Provider value={{ openComposer: (prefill) => setComposer({ open: true, prefill }), openCollections: setPicker }}>
       <Suspense fallback={null}>
         <NavTracker />
       </Suspense>
@@ -52,6 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <BottomNav />
       </div>
       <Composer open={composer.open} prefill={composer.prefill} onClose={() => setComposer({ open: false })} />
+      {picker && <CollectionPicker key={`${picker.type}:${picker.id}`} item={picker} onClose={() => setPicker(null)} />}
     </ShellCtx.Provider>
   );
 }
@@ -156,7 +164,7 @@ function UserMenu({ side = "bottom", full = false }: { side?: "top" | "bottom"; 
 }
 
 /** Header icon size: a bit smaller on narrow phones so logo, search, new post, favorites, cart, notifications, language and avatar fit at 320 px. */
-const PHONE_ICON = "size-8 min-[360px]:size-9 sm:size-10";
+const PHONE_ICON = "size-8 shrink-0 min-[360px]:size-9 sm:size-10";
 
 const SHORT: Record<Locale, string> = { ru: "RU", en: "EN", "pt-BR": "PT", es: "ES" };
 
@@ -176,9 +184,9 @@ function LanguageSwitcher() {
           {...p}
           aria-label={t("nav2.language", { lang: LOCALE_NAMES[locale] })}
           title={t("nav2.languageTitle")}
-          className={cn("inline-flex items-center justify-center gap-1 rounded-xl text-[13px] font-bold text-ink hover:bg-ink-soft/70 sm:h-10 sm:w-auto sm:min-w-10 sm:px-2", PHONE_ICON)}
+          className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-xl px-1.5 text-[13px] font-bold text-ink hover:bg-ink-soft/70 min-[360px]:h-9 min-[360px]:min-w-9 sm:h-10 sm:min-w-10 sm:px-2"
         >
-          <Languages className="size-[18px]" />
+          <Languages className="size-5 shrink-0" />
           <span className="hidden sm:inline">{SHORT[locale]}</span>
         </button>
       )}

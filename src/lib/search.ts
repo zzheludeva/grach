@@ -1,3 +1,4 @@
+import { isTutorialListed } from "./access";
 import type { SeedData } from "@/data/seed";
 import type { CategoryId, CountryCode, CurrencyCode, Money, Post, Product, Project, Tutorial, User, Workshop } from "./types";
 import { categorySearchTerms, techniqueSearchTerms } from "@/i18n/content";
@@ -132,7 +133,7 @@ function index(c: Ctx, q: string): SearchItem[] {
     out.push({ type: "workshop", id: w.id, title: w.title, createdAt: w.createdAt, score: s, popularity: booked, saves: favCount(d, "workshop", w.id), price: next?.price ?? w.price, eventAt: next?.startsAt, cat: w.category, lang: w.lang, country: w.country, tech: w.technique, ref: w });
   }
   for (const tu of d.tutorials) {
-    if (tu.status !== "published") continue;
+    if (!isTutorialListed(tu)) continue; // private and link-only materials never appear in search
     const s = score(q, tu.title, `${tu.summary} ${tu.steps.map((x) => `${x.title} ${x.text}`).join(" ")} ${user(tu.authorId)?.name ?? ""}`, tu.category, tu.technique);
     if (q && !s) continue;
     const buys = d.tutorialPurchases.filter((x) => x.tutorialId === tu.id).length;

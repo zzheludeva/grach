@@ -5,13 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Link2, Send, Trash, WandSparkles, Play } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { AddToCollectionButton } from "@/components/collections/CollectionModals";
+import { useShell } from "@/components/shell/AppShell";
 import { BackLink } from "@/components/common/BackLink";
 import { useI18n } from "@/i18n/I18nProvider";
 import { commentsOf, userById } from "@/lib/selectors";
 import { Avatar, Badge, Card, EmptyState, Textarea } from "@/components/ui/primitives";
 import { Button, ButtonLink, IconButton } from "@/components/ui/button";
 import { FollowButton, LikeButton, SaveButton } from "@/components/common/actions";
-import { TranslateBar, useTranslation } from "@/components/common/Translatable";
+import { TranslateBar, TranslatableText, useContentTranslation } from "@/components/common/Translatable";
 import { PostCard } from "@/components/feed/PostCard";
 import { categoryColor } from "@/i18n/content";
 import { useToast } from "@/components/ui/toast";
@@ -19,13 +21,14 @@ import { useToast } from "@/components/ui/toast";
 export default function PostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { state, me, meId, actions } = useStore();
+  const { openCollections } = useShell();
   const { t, cat, relative, date } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const d = state!.data;
   const post = d.posts.find((p) => p.id === id);
   const [text, setText] = useState("");
-  const tr = useTranslation(post?.lang ?? "ru", post?.translations);
+  const tr = useContentTranslation([post?.title ?? "", post?.body ?? ""], post?.lang);
 
   useEffect(() => {
     if (post) {
@@ -39,8 +42,8 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
   const author = userById(d, post.authorId)!;
   const comments = commentsOf(d, post.id);
   const related = d.posts.filter((p) => p.id !== post.id && (p.category === post.category || p.authorId === post.authorId)).slice(0, 3);
-  const title = tr.on ? tr.tr!.title : post.title;
-  const body = tr.on ? tr.tr!.body : post.body;
+  const title = tr.text(0);
+  const body = tr.text(1);
 
   const send = () => {
     if (!text.trim()) return;
@@ -91,7 +94,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
             <p className="whitespace-pre-line text-[15px] leading-relaxed text-text/90" lang={tr.on ? undefined : post.lang}>
               {body}
             </p>
-            <TranslateBar contentLang={post.lang} state={tr} />
+            <TranslateBar state={tr} />
             <p className="text-xs text-faint" title={date(post.createdAt, "datetime")}>
               {relative(post.createdAt)} · {t("post.views", { count: post.views })}
             </p>
@@ -99,6 +102,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
           <div className="flex flex-wrap items-center gap-1 border-y border-line px-3 py-2">
             <LikeButton postId={post.id} />
             <SaveButton type="post" id={post.id} />
+            <AddToCollectionButton type="post" id={post.id} onOpen={openCollections} className="h-9 border-0 px-2 text-muted hover:text-ink" />
             <IconButton
               label={t("post.copyLink")}
               onClick={() => {
@@ -148,7 +152,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                           </button>
                         )}
                       </div>
-                      <p className="text-sm leading-relaxed text-text/90">{c.text}</p>
+                      <TranslatableText text={c.text} lang={u.contentLang} className="text-sm leading-relaxed text-text/90" />
                     </div>
                   </li>
                 );
